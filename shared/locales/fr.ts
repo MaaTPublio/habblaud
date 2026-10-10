@@ -2606,4 +2606,11 @@ export const FR: Readonly<Record<string, string>> = {
   "O Habblaud solta o pedido agora: responda no prompt do OpenCode": "Habblaud libère la demande maintenant : répondez dans l'invite d'OpenCode",
   "Motivo (obrigatório no {0}, vai para o agente). Ex.: use pnpm em vez de npm": "Motif (obligatoire dans {0}, transmis à l'agent). Ex. : utilise pnpm au lieu de npm",
   "Escreva o motivo: o {0} recusa só com um motivo": "Écrivez le motif : {0} ne refuse qu'avec un motif",
+  "Entra na sessão do OpenCode como um novo prompt. Enter manda; Shift+Enter quebra a linha.": "Entre dans la session OpenCode comme une nouvelle invite. Entrée envoie ; Maj+Entrée passe à la ligne.",
+  "Para mandar mensagens ao OpenCode: `npm run opencode:install` e reabra o OpenCode": "Pour envoyer des messages à OpenCode : `npm run opencode:install` puis rouvrez OpenCode",
+  "Para responder, use o OpenCode": "Pour répondre, utilisez OpenCode",
+  "a sessão do OpenCode não está com o plugin do Habblaud conectado (npm run opencode:install e reabrir o OpenCode)": "la session OpenCode n'a pas le plugin Habblaud connecté (npm run opencode:install puis rouvrir OpenCode)",
+  "o plugin do OpenCode não buscou a mensagem: o npm run opencode:install foi feito e a sessão está aberta?": "le plugin OpenCode n'a pas récupéré le message : npm run opencode:install a-t-il été fait et la session est-elle ouverte ?",
+  "o plugin do OpenCode não confirmou a entrega": "le plugin OpenCode n'a pas confirmé la livraison",
+  "sem notícia da entrega: confira no OpenCode": "pas de nouvelles de la livraison : vérifiez dans OpenCode",
 };
