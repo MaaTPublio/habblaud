@@ -54,6 +54,9 @@ export const CODEX_PERMISSION_NOTE = tr('No Codex, a aprovação só aparece no 
 /** Aviso do cartão de um pedido do OpenCode. */
 export const OPENCODE_PERMISSION_NOTE = tr('No OpenCode, o pedido já está na tela dele: responder aqui o resolve lá, e sem resposta aqui vale o prompt do OpenCode.');
 
+/** Aviso do cartão de um pedido do Antigravity. */
+export const ANTIGRAVITY_PERMISSION_NOTE = tr('No Antigravity, o comando espera aqui até o prazo acabar; sem resposta aqui, o agy mostra o prompt dele.');
+
 /** O que o cartão oferece para um pedido (muda com a ferramenta). */
 export interface PermissionOptions {
   /** "Aprovar e não perguntar de novo" (as sugestões do Claude Code). */
@@ -70,6 +73,8 @@ export interface PermissionOptions {
 
 export function permissionOptions(p: Pick<PermissionRequestInfo, 'provider' | 'suggestions'> & { tool?: string }, agent: Pick<AgentInfo, 'kind' | 'background'>): PermissionOptions {
   if (p.provider === 'codex') return { always: false, interrupt: false, reasonRequired: true, seconds: true, note: CODEX_PERMISSION_NOTE };
+  // Antigravity: só aprovar ou recusar; o motivo da recusa é opcional (o hook manda `reason` se houver).
+  if (p.provider === 'antigravity') return { always: false, interrupt: false, reasonRequired: false, seconds: true, note: ANTIGRAVITY_PERMISSION_NOTE };
   // Pergunta: recusar não leva texto (o plugin manda reject sem corpo), então o motivo não é obrigatório.
   if (p.provider === 'opencode') return { always: false, interrupt: false, reasonRequired: p.tool !== ASK_TOOL, seconds: true, note: OPENCODE_PERMISSION_NOTE };
   // Subagente em segundo plano: o Claude Code só mostra o diálogo depois que o hook responde.
@@ -339,9 +344,11 @@ export class PermissionCard {
     const opts = (this.opts = permissionOptions(p, agent));
     const codex = p.provider === 'codex';
     const opencode = p.provider === 'opencode';
-    this.hosted = codex ? 'Codex' : opencode ? 'OpenCode' : '';
+    const antigravity = p.provider === 'antigravity';
+    this.hosted = codex ? 'Codex' : opencode ? 'OpenCode' : antigravity ? 'Antigravity' : '';
     this.el.classList.toggle('is-codex', codex);
     this.el.classList.toggle('is-opencode', opencode);
+    this.el.classList.toggle('is-antigravity', antigravity);
     const ask = isQuestionRequest(p);
     const kind = ask ? 'ask' : 'perm';
     if (this.el.dataset.kind !== kind) {
@@ -359,7 +366,9 @@ export class PermissionCard {
         ? tr('Pedido feito às {0}. Sem resposta aqui até {1}, o Codex segue sem a decisão do escritório e pede a aprovação no terminal.', [formatClock(p.createdAt), formatClock(p.expiresAt)])
         : opencode
           ? tr('Pedido feito às {0}. Sem resposta aqui até {1}, o OpenCode segue sem a decisão do escritório: vale o prompt dele.', [formatClock(p.createdAt), formatClock(p.expiresAt)])
-          : tr('Pedido feito às {0}. Sem resposta aqui até {1}, o Habblaud devolve o pedido ao terminal.', [formatClock(p.createdAt), formatClock(p.expiresAt)]),
+          : antigravity
+            ? tr('Pedido feito às {0}. Sem resposta aqui até {1}, o Antigravity segue sem a decisão do escritório: vale o prompt dele.', [formatClock(p.createdAt), formatClock(p.expiresAt)])
+            : tr('Pedido feito às {0}. Sem resposta aqui até {1}, o Habblaud devolve o pedido ao terminal.', [formatClock(p.createdAt), formatClock(p.expiresAt)]),
     );
 
     // Pergunta: o formulário com as opções no lugar do título da ferramenta e da prévia dos argumentos.
@@ -402,7 +411,9 @@ export class PermissionCard {
         ? tr('O Habblaud solta o pedido agora: o Codex mostra a aprovação no terminal')
         : opencode
           ? tr('O Habblaud solta o pedido agora: responda no prompt do OpenCode')
-          : tr('O Habblaud deixa este pedido de lado: vale o que você responder no terminal'),
+          : antigravity
+            ? tr('O Habblaud solta o pedido agora: responda no prompt do Antigravity')
+            : tr('O Habblaud deixa este pedido de lado: vale o que você responder no terminal'),
     );
     this.suggestions.sync(opts.always ? (p.suggestions ?? []) : []);
     for (const b of this.suggestions.container.querySelectorAll('button')) b.disabled = busy;
