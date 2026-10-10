@@ -2602,4 +2602,5 @@ export const FR: Readonly<Record<string, string>> = {
   "O terminal ainda não mostra sessões do {0}.": "Le terminal n'affiche pas encore les sessions de {0}.",
   "o OpenCode não tem cota única": "OpenCode n'a pas de quota unique",
   "O OpenCode usa vários provedores e contas, sem uma cota única para mostrar aqui.": "OpenCode utilise plusieurs fournisseurs et comptes, sans quota unique à afficher ici.",
+  "eventos do OpenCode só são aceitos pelo próprio computador (http://localhost ou http://127.0.0.1)": "Les événements d'OpenCode ne sont acceptés que depuis cet ordinateur (http://localhost ou http://127.0.0.1)",
 };

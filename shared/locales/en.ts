@@ -2586,4 +2586,5 @@ export const EN: Readonly<Record<string, string>> = {
   "O terminal ainda não mostra sessões do {0}.": "The terminal doesn't show {0} sessions yet.",
   "o OpenCode não tem cota única": "OpenCode has no single quota",
   "O OpenCode usa vários provedores e contas, sem uma cota única para mostrar aqui.": "OpenCode uses several providers and accounts, with no single quota to show here.",
+  "eventos do OpenCode só são aceitos pelo próprio computador (http://localhost ou http://127.0.0.1)": "OpenCode events are only accepted from this computer (http://localhost or http://127.0.0.1)",
 };
