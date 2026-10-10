@@ -41,7 +41,7 @@ import {
 import { access } from '../net/access';
 import { PermissionCard } from './permission';
 import { canRenameRoom } from './roomrename';
-import { accountChipLabel, accountProvider, CODEX_LIVE_HINT, codexApprovalLabel, hasTerminal, noTerminalHint, providerOf } from './provider';
+import { accountChipLabel, accountProvider, CODEX_LIVE_HINT, codexApprovalLabel, hasTerminal, noTerminalHint, providerOf, showsPermissionsPluginHint } from './provider';
 import { ptyControllable } from './ptyapi';
 import { createAgentRow, updateAgentRow } from './rows';
 import { SocialSection } from './social';
@@ -583,7 +583,7 @@ class AgentView {
     // Sem o pedido no escritório: dá para responder por aqui com o plugin (só com a trava local, como o cartão). O Codex
     // não responde perguntas pelo escritório.
     const answerable =
-      !codex && !!asking?.questions?.length && !this.perm.visible && !this.ctx.store.mock && !!this.ctx.store.snapshot?.meta.terminal && access().permissions;
+      showsPermissionsPluginHint(a) && !!asking?.questions?.length && !this.perm.visible && !this.ctx.store.mock && !!this.ctx.store.snapshot?.meta.terminal && access().permissions;
     setHidden(this.alertAnswerHint, !answerable);
 
     // Esperando o shell.

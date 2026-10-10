@@ -315,6 +315,7 @@ const api = createApiHandler({
   codexLive,
   opencodeEvents: config.opencode,
   opencodeLive: opencode,
+  releaseOpencodeQuestions: permissions ? (sessionId) => void permissions.releaseOpencodeQuestions(sessionId) : undefined,
   stats,
   updates,
   remote: config.remote ? { is: isRemoteRequest, allows: (f) => config.remote!.allow.has(f) } : undefined,
