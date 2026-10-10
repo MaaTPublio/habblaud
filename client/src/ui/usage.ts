@@ -12,7 +12,7 @@ import type { UiContext } from './context';
 import { h, KeyedList, setAttr, setHidden, setStyleVar, setText, setTitle, setVariant } from './dom';
 import { FIVE_HOURS_MS, relativeTime, usageLevel, usageWindowView, WEEK_MS, type UsageWindowView } from './format';
 import { ICONS } from './icons';
-import { isCodex, isOpencode, providerOf } from './provider';
+import { isAntigravity, isCodex, isOpencode, providerOf } from './provider';
 import { usageRowFits } from './usage-row';
 import { createAccountChip, createProviderTag, updateAccountChip, updateProviderTag } from './widgets';
 import { tr } from '../../../shared/i18n';
@@ -186,18 +186,19 @@ export function usageMessage(a: Pick<AccountInfo, 'usage' | 'usageStatus' | 'pro
   const state = cardState(a);
   if (state === 'noquota') return [tr('sem cota'), tr('sem cota')];
   if (isOpencode(a)) return [tr('o OpenCode não tem cota única'), tr('sem cota')];
+  if (isAntigravity(a)) return [tr('o Antigravity não tem cota única'), tr('sem cota')];
   if (isCodex(a)) return [tr('sem dados ainda'), tr('sem dados')];
   return [tr('sem dados de uso'), tr('sem dados')];
 }
 
-/** O botão "Como ativar" aparece? Não no OpenCode (sem cota única, não há o que ativar) nem sem cota. */
+/** O botão "Como ativar" aparece? Não no OpenCode nem no Antigravity (sem cota única, não há o que ativar) nem sem cota. */
 export function usageHowVisible(a: Pick<AccountInfo, 'usage' | 'usageStatus' | 'provider'>): boolean {
-  return !isOpencode(a) && cardState(a) !== 'noquota';
+  return !isOpencode(a) && !isAntigravity(a) && cardState(a) !== 'noquota';
 }
 
 /** O passo a passo "Como ter o uso ao vivo" (statusline do Claude Code) aparece na dica? Só no Claude Code. */
 export function usageSetupVisible(a: Pick<AccountInfo, 'provider'>): boolean {
-  return !isCodex(a) && !isOpencode(a);
+  return !isCodex(a) && !isOpencode(a) && !isAntigravity(a);
 }
 
 /** Explicação do cartão de uma conta do Codex (dica); '' nas outras. */
@@ -438,6 +439,13 @@ export class UsageCards {
       return;
     }
 
+    // Antigravity: a conta é só um marcador dos eventos do hook, sem cota para mostrar; a dica não manda instalar nada.
+    if (isAntigravity(a)) {
+      setText(r.tipNote, tr('O Antigravity não informa uma cota que o Habblaud possa mostrar aqui.'));
+      setHidden(r.tipNote, false);
+      setHidden(r.tipSetup, !usageSetupVisible(a));
+      return;
+    }
     // OpenCode: vários provedores e contas, sem cota única; a dica não manda instalar nada.
     if (isOpencode(a)) {
       setText(r.tipNote, tr('O OpenCode usa vários provedores e contas, sem uma cota única para mostrar aqui.'));
