@@ -5,7 +5,7 @@
 <h1 align="center">Habblaud</h1>
 
 <p align="center">
-  <b>The virtual office for your Claude Code (and Codex and OpenCode) agents.</b><br />
+  <b>The virtual office for your Claude Code (and Codex, OpenCode and Antigravity) agents.</b><br />
   Each project becomes a room, and each agent becomes a pixel-art character that shows, in real time, what it's doing.
 </p>
 
@@ -246,6 +246,21 @@ Then **reopen OpenCode**: it loads the plugin on startup. Without the plugin the
 messages and no live status: only what reading the database shows (see [OpenCode](#opencode)). After updating
 Habblaud, run `npm run opencode:install` again (the plugin is a copy; `status` warns when it has fallen behind).
 
+### 6. Antigravity in the office (optional)
+
+If you also use the **Antigravity CLI** (`agy`), its sessions show up in the same office: each working folder is a room
+and each conversation is a character with the **Antigravity** tag. Habblaud doesn't read any `agy` file (the format of
+its conversations isn't documented): it only receives the events of a hook, which you install once:
+
+```bash
+npm run antigravity:install   # registers the "habblaud" hook in ~/.gemini/config/hooks.json (backup first) and copies the script
+npm run antigravity:status    # checks it
+```
+
+Then open a **new `agy` session** (in it, `/hooks` lists the loaded hook). The agent shows up when you send the first
+request and goes away after 30 minutes without events. After updating Habblaud, run `npm run antigravity:install`
+again (the script is a copy; `status` warns when it has fallen behind).
+
 ### Open on your phone (optional)
 
 By default Habblaud only accepts connections from the computer it runs on. To open it on your phone (on the same Wi-Fi), with Docker:
@@ -367,6 +382,7 @@ npm run docker:up        # tira o container codetown e copia os dados do volume 
 npm run mod:uninstall                       # tira o mod, os plugins de permissões e de mensagens e o marketplace
 npm run codex:uninstall                     # tira os hooks do Habblaud do Codex (os outros ficam)
 npm run opencode:uninstall                  # removes the OpenCode plugin (only the two files the installer wrote)
+npm run antigravity:uninstall               # removes the Antigravity hook (only the "habblaud" hook and the two files the installer wrote)
 npm run docker:down                         # para o container
 docker volume rm habblaud_habblaud-data     # apaga os dados do container (nomes, salas, linha do tempo e estatísticas)
 docker image rm habblaud:local              # apaga a imagem
@@ -664,6 +680,30 @@ and denied from the office. "Always allow" and interrupt are deliberately not of
 - `HABBLAUD_OPENCODE=0` turns off both layers; `HABBLAUD_OPENCODE_DIR` points to OpenCode's data folder.
 - OpenCode has no usage (quota), and the terminal and the session history don't cover OpenCode yet.
 
+### Antigravity
+
+Antigravity CLI (`agy`) conversations show up like Claude Code's, Codex's and OpenCode's: character, working-folder room
+and activity. The account chip is fixed ("Antigravity") and carries the **Antigravity** tag. This part is implemented
+and covered by automated tests, and was checked end to end on `agy` 1.3.3, on Linux (agent showing up with the tool's
+activity, idle at the end of the round, and plain `agy` working with Habblaud stopped).
+
+- **Hook only.** `npm run antigravity:install` registers a hook called `habblaud` on the five `agy` events
+  (`PreInvocation`, `PostInvocation`, `PreToolUse`, `PostToolUse` and `Stop`) and copies the script to
+  `~/.habblaud/antigravity-hook.mjs` (and the port to `~/.habblaud/antigravity-hook.json`). The other hooks in
+  `hooks.json` stay as they are; `--dry-run` only shows the plan.
+- **The hook only observes.** It sends the event to Habblaud within 1.5 s, prints nothing and always exits with 0,
+  because `agy` stops the agent while the hook runs. With Habblaud stopped, `agy` carries on as usual.
+- **Status:** working on every model pass and every tool; idle when the round ends (`Stop`). Between one pass and the
+  next `agy` fires `PostInvocation` and right after `PreInvocation`, so only `Stop` counts as idle.
+- **Presence:** there is no end-of-session event, so the conversation leaves after 30 minutes without events. A round
+  that `agy` aborts without finishing (for example, in `-p` mode when a tool is denied) doesn't fire `Stop`: the agent
+  stays "working" until those 30 minutes pass.
+- **Limits:** no approving from the office (tested on `agy` 1.3.3: the hook can only deny; `allow` and
+  `permissionOverrides` approve nothing), no sending messages, no usage (quotas), terminal or history. Sessions with
+  `--dangerously-skip-permissions` are reported as having no hooks and don't show up (not tested here).
+- `HABBLAUD_ANTIGRAVITY=0` turns it off. The hooks contract was checked on `agy` 1.3.3; another version may change the
+  format.
+
 ### GitHub in the office
 
 What the agents do on GitHub livens up the project's room, with no token and no internet access: Habblaud reads the
@@ -787,6 +827,7 @@ Everything works without configuring anything. If you need to adjust something, 
 | `HABBLAUD_CODEX_BIN` | `codex` from PATH (on Windows, `codex.exe`) | The Codex binary that delivers the messages (`codex queue`), in Node mode or in `npm run codex:bridge`. |
 | `HABBLAUD_OPENCODE` | on | `0` turns OpenCode off in the office (the database reading and the plugin's events). |
 | `HABBLAUD_OPENCODE_DIR` | `$XDG_DATA_HOME/opencode` or `~/.local/share/opencode` | OpenCode's data folder (where `opencode.db` lives). |
+| `HABBLAUD_ANTIGRAVITY` | on | `0` turns Antigravity off in the office (the hook events). |
 | `HABBLAUD_UPDATE_CHECK` | on | `0` turns off the new-version check (a request to the repository's releases on GitHub every 6 h). |
 | `HABBLAUD_LANG` | system language (except English), otherwise `pt-BR` | Language of the texts the server builds (activities, notices, logs): `pt-BR`, `en`, `es` or `fr`. The interface follows the browser or the choice in Settings › Language. See [Languages](#languages). |
 | `HABBLAUD_ACCOUNTS` | — | JSON to customize name, letter or color, matched by the account folder name. E.g. `[{"id":".claude-conta2","name":"Trabalho","short":"T","color":"#5cc97b"}]`. |
@@ -858,6 +899,7 @@ mod/      o mod do Habblaud e os plugins de permissões e de mensagens (plugins 
 | `/api/codex/bridge/poll` and `/ack` | `npm run codex:bridge` fetches the messages for Codex and confirms delivery. Local access only. |
 | `POST /api/opencode/events` | Events from the OpenCode plugin (status, tasks, tools, permission requests). Local access only. |
 | `/api/opencode/bridge/poll` and `/ack` | The OpenCode plugin fetches its own session's messages, delivers them and confirms. Local access only. |
+| `POST /api/antigravity/events` | Events from the Antigravity hook (the five `agy` events). Local access only. |
 
 More server details in [`server/README.md`](server/README.md).
 
@@ -974,6 +1016,12 @@ metadata (letter, email, organization) is read on the host by `docker:up` and pa
   `~/.config/opencode/plugins/habblaud.js` and `~/.habblaud/opencode-hook.json` (with a backup before replacing a file)
   and the plugin only talks to `127.0.0.1`. Messages to OpenCode carry the same warning as the others: any program on
   this machine that talks to Habblaud can leave a message in the queue of a session that has the plugin.
+- **Antigravity:** Habblaud doesn't open any `agy` file (conversations, `brain/`, login token, `settings.json`). The hook
+  only sends the event, the conversation id, the working folder, the step number and, for a tool, its name and a short
+  text (the command, the file or its summary): the text of the requests, the tools' output and the transcript never
+  leave `agy`. `npm run antigravity:install` only writes `~/.gemini/config/hooks.json` (one key, "habblaud", with a
+  backup before changing it), `~/.habblaud/antigravity-hook.mjs` and `~/.habblaud/antigravity-hook.json`; the hook only
+  talks to `127.0.0.1`.
 - **What shows up on screen:** activity summaries (tool, file, command or query), session titles,
   tasks and stats (and, in the terminal, the conversation). Don't expose the port on networks you don't
   trust.
