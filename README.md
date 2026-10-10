@@ -691,8 +691,8 @@ activity, idle at the end of the round, and plain `agy` working with Habblaud st
   (`PreInvocation`, `PostInvocation`, `PreToolUse`, `PostToolUse` and `Stop`) and copies the script to
   `~/.habblaud/antigravity-hook.mjs` (and the port to `~/.habblaud/antigravity-hook.json`). The other hooks in
   `hooks.json` stay as they are; `--dry-run` only shows the plan.
-- **The hook only observes.** It sends the event to Habblaud within 1.5 s, prints nothing and always exits with 0,
-  because `agy` stops the agent while the hook runs. With Habblaud stopped, `agy` carries on as usual.
+- **The hook only observes.** It gives up talking to Habblaud after 1.5 s (never more than 3 s), prints nothing and
+  always exits with 0, because `agy` stops the agent while the hook runs. With Habblaud stopped, `agy` carries on as usual.
 - **Status:** working on every model pass and every tool; idle when the round ends (`Stop`). Between one pass and the
   next `agy` fires `PostInvocation` and right after `PreInvocation`, so only `Stop` counts as idle.
 - **Presence:** there is no end-of-session event, so the conversation leaves after 30 minutes without events. A round
