@@ -96,9 +96,12 @@ export function emptyOfficeHint(accounts: readonly Pick<AccountInfo, 'short' | '
   return tr('Abra o Claude Code{0} ou o Codex em qualquer projeto e veja seu agente chegar.', [keys ? ` (${keys})` : '']);
 }
 
-/** Algum pedido de permissão do Codex esperando: o prazo é curto e o cartão conta os segundos (relógio de 1 s). */
+/**
+ * Algum pedido de permissão do Codex (ou do OpenCode, que também tem prazo curto) esperando: o cartão conta os segundos
+ * (relógio de 1 s).
+ */
 export function hasCodexPermission(snap: Pick<OfficeSnapshot, 'agents'> | null): boolean {
-  return !!snap?.agents.some((a) => a.permission && isCodex(a.permission) && a.status !== 'offline' && a.status !== 'done');
+  return !!snap?.agents.some((a) => a.permission && (isCodex(a.permission) || isOpencode(a.permission)) && a.status !== 'offline' && a.status !== 'done');
 }
 
 /** Como ver o Codex ao vivo e aprovar pelo escritório (gaveta de um agente do Codex e ajuda). */
