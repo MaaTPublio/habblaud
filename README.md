@@ -230,7 +230,7 @@ also keep `npm run codex:bridge` running on the Mac (see [Codex](#codex)).
 ### 5. OpenCode in the office (optional)
 
 If you also use **OpenCode**, its sessions show up in the same office: each project is a room and each session is a
-character with the **OpenCode** tag. Habblaud finds OpenCode's database (`~/.local/share/opencode/opencode.db`) and reads
+character on the **OpenCode** account. Habblaud finds OpenCode's database (`~/.local/share/opencode/opencode.db`) and reads
 it **read-only**, without installing anything. This needs **Node 22.13 or newer** (that's when `node:sqlite` works
 without an extra flag): on Node 22.12 the reading stays off, Habblaud says so with one line in the log and everything
 else works as usual. **In Docker this reading doesn't exist:** the container can't see OpenCode's database (`docker:up`
@@ -620,7 +620,7 @@ Codex account chip is hollow and carries the **CODEX** tag.
 ### OpenCode
 
 OpenCode sessions show up like Claude Code's and Codex's: character, project room (the session's folder), activity,
-tasks and subagents. The account chip is fixed ("OpenCode") and carries the **OpenCode** tag. This part is implemented
+tasks and subagents. The account chip is fixed and is called "OpenCode". This part is implemented
 and covered by automated tests, and was checked on OpenCode 1.18.35, on Linux, with a temporary, isolated home folder.
 
 - Habblaud reads OpenCode's database every second, read-only, without installing anything. A session shows up while

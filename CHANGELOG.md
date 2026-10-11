@@ -38,7 +38,7 @@ do meio (0.**3**.0).
   rodapé do terminal diz para responder no Claude Code (ou no Codex).
 
 - **OpenCode no escritório.** As sessões do OpenCode entram como as do Claude Code e do Codex: cada projeto é uma sala,
-  cada sessão um personagem com o selo **OpenCode**, com atividade das ferramentas, subagentes e status (trabalhando
+  cada sessão um personagem na conta **OpenCode**, com atividade das ferramentas, subagentes e status (trabalhando
   ou ocioso). Sem instalar nada, o Habblaud lê o banco do OpenCode (`opencode.db`) só para leitura, e apenas as tabelas
   `project`, `session`, `message`, `part` e `todo` (nunca o `auth.json`, a configuração nem os logs); isso pede o
   Node 22.13 ou mais novo (no Node 22.12 a leitura fica desligada, com uma linha no log, e o resto segue).
