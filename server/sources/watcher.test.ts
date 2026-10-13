@@ -744,3 +744,52 @@ describe('ClaudeWatcher — shell lançado no começo de um transcript maior que
     }
   });
 });
+
+describe('ClaudeWatcher — compactações', () => {
+  const boundary = (trigger?: string) => L.system('compact_boundary', trigger ? { compactMetadata: { trigger } } : {});
+  const reads = (n: number, from = 0) => Array.from({ length: n }, (_, i) => L.assistant([L.tool(`r${from + i}`, 'Read', { file_path: `${CWD}/src/arquivo${from + i}.ts` })]));
+
+  it('COMPACT-08 e COMPACT-10: agente principal com janela + prefixo + linha ao vivo', async () => {
+    const c = setup({ tailBytes: 1_500 });
+    try {
+      writeLines(c.transcript('sess-c'), [boundary('auto'), ...reads(30), boundary('manual'), boundary()]);
+      c.openSession(900, 'sess-c');
+      c.watcher.boot();
+      c.notices.push(...c.office.commit().notices);
+      // Só a janela final foi lida: o prefixo (1 fronteira) ainda não entrou.
+      expect(c.agent('.claude:900')!.stats.compactions).toBeLessThan(3);
+      await c.watcher.idle();
+      c.poll();
+      expect(c.agent('.claude:900')!.stats.compactions).toBe(3);
+
+      appendLines(c.transcript('sess-c'), [boundary('auto')]);
+      c.poll();
+      expect(c.agent('.claude:900')!.stats.compactions).toBe(4);
+    } finally {
+      c.watcher.stop();
+      c.tmp.cleanup();
+    }
+  });
+
+  it('COMPACT-09: releitura do começo não acumula o valor anterior', async () => {
+    const c = setup({ tailBytes: 1_500 });
+    try {
+      writeLines(c.transcript('sess-d'), [boundary(), ...reads(30), boundary(), boundary()]);
+      c.openSession(901, 'sess-d');
+      c.watcher.boot();
+      await c.watcher.idle();
+      c.poll();
+      expect(c.agent('.claude:901')!.stats.compactions).toBe(3);
+
+      // Arquivo substituído por outro menor, com 2 fronteiras.
+      writeLines(c.transcript('sess-d'), [boundary(), ...reads(2), boundary()]);
+      c.poll();
+      await c.watcher.idle();
+      c.poll();
+      expect(c.agent('.claude:901')!.stats.compactions).toBe(2);
+    } finally {
+      c.watcher.stop();
+      c.tmp.cleanup();
+    }
+  });
+});
