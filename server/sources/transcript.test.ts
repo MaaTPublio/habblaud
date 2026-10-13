@@ -431,6 +431,26 @@ describe('parseLine — sinais de shells', () => {
       tmp.cleanup();
     }
   });
+
+  it('COMPACT-07: scanPrefix sem keepActivities conta as fronteiras do começo do arquivo', async () => {
+    const tmp = tempDir();
+    try {
+      const file = join(tmp.dir, 's.jsonl');
+      const text = [
+        L.system('compact_boundary', { compactMetadata: { trigger: 'auto' } }),
+        L.assistant([L.tool('t1', 'Read', { file_path: '/p/a.ts' })], { msgId: 'p1' }),
+        L.system('compact_boundary', { compactMetadata: { trigger: 'manual' } }),
+      ]
+        .map((l) => `${l}\n`)
+        .join('');
+      writeFileSync(file, text);
+      const prefix = await scanPrefix(file, Buffer.byteLength(text), new Set());
+      expect(prefix.state.stats.compactions).toBe(2);
+      expect(prefix.state.stats.toolCalls).toBe(1);
+    } finally {
+      tmp.cleanup();
+    }
+  });
 });
 
 describe('janela final + prefixo em segundo plano', () => {

@@ -753,6 +753,8 @@ const PREFIX_MARKERS = [
   // Shells em segundo plano: lançamento e término (para saber quais ainda rodam).
   '"backgroundTaskId"',
   '<task-notification>',
+  // Fronteira de compactação: conta no número da gaveta, mesmo na leitura sem atividades.
+  '"subtype":"compact_boundary"',
 ];
 
 function prefixRelevant(state: TranscriptState, line: string): boolean {
