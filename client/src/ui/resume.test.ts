@@ -23,6 +23,7 @@ describe('resumeCommand (Claude Code)', () => {
   it('shellQuote usa aspas simples e escapa cada aspa simples', () => {
     expect(shellQuote('a b')).toBe("'a b'");
     expect(shellQuote("a'b")).toBe("'a'\\''b'");
+    expect(shellQuote("it's a 'b' c")).toBe("'it'\\''s a '\\''b'\\'' c'");
     expect(shellQuote('')).toBe("''");
   });
 
@@ -40,6 +41,9 @@ describe('resumeCommand (Claude Code)', () => {
     const project = `/home/ana/a b'c $HOME \`x\` ;y && "z" \\w`;
     expect(resumeCommand(session({ project }), undefined)).toBe(
       `cd '/home/ana/a b'\\''c $HOME \`x\` ;y && "z" \\w' && claude --resume ${ID}`,
+    );
+    expect(resumeCommand(session({ project: "/home/ana/it's a 'b' c" }), undefined)).toBe(
+      `cd '/home/ana/it'\\''s a '\\''b'\\'' c' && claude --resume ${ID}`,
     );
     const configDir = `/home/ana/.c'd $X`;
     expect(resumeCommand(session({ account: '.claude-conta2' }), { id: '.claude-conta2', configDir })).toBe(
@@ -60,7 +64,7 @@ describe('resumeCommand (Claude Code)', () => {
   });
 
   it('caractere de controle no project ou no configDir necessário recusa o comando', () => {
-    for (const c of ['\n', '\r', '\u0000', '\u007f']) {
+    for (const c of ['\n', '\r', '\u0000', '\u0001', '\t', '\u001b', '\u001f', '\u007f']) {
       expect(resumeCommand(session({ project: `/home/ana/p${c}q` }), undefined)).toBeUndefined();
       expect(
         resumeCommand(session({ account: '.claude-conta2' }), { id: '.claude-conta2', configDir: `/home/ana/.c${c}d` }),
@@ -72,6 +76,8 @@ describe('resumeCommand (Claude Code)', () => {
     expect(resumeCommand(session({ sessionId: 'x' }), undefined)).toBeUndefined();
     expect(resumeCommand(session({ sessionId: '3f2b9c1e' }), undefined)).toBeUndefined();
     expect(resumeCommand(session({ sessionId: `${ID}; rm -rf ~` }), undefined)).toBeUndefined();
+    expect(resumeCommand(session({ sessionId: `x; rm -rf ~ ${ID}` }), undefined)).toBeUndefined();
+    expect(resumeCommand(session({ sessionId: `x${ID}` }), undefined)).toBeUndefined();
     expect(resumeCommand(session({ sessionId: ID.toUpperCase() }), undefined)).toBe(
       `cd '/home/ana/proj' && claude --resume ${ID.toUpperCase()}`,
     );
