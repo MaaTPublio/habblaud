@@ -687,6 +687,9 @@ class LineParser {
         return;
       }
       case 'compact_boundary':
+        // Fora do push: ele sai cedo sem activities, e o prefixo dos subagentes também conta.
+        this.s.stats.compactions = (this.s.stats.compactions ?? 0) + 1;
+        this.changed();
         this.push(SPECIAL.compact());
         return;
       case 'api_error':

@@ -128,6 +128,40 @@ describe('parseLine — atividades', () => {
   });
 });
 
+describe('parseLine — compactações', () => {
+  it('COMPACT-01: conta cada fronteira, auto, manual e sem metadata', () => {
+    const s = createTranscriptState();
+    feed(s, [
+      L.system('compact_boundary', { compactMetadata: { trigger: 'auto' } }),
+      L.system('compact_boundary', { compactMetadata: { trigger: 'manual' } }),
+      L.system('compact_boundary'),
+    ]);
+    expect(s.stats.compactions).toBe(3);
+  });
+
+  it('COMPACT-02: conta com activities: false', () => {
+    const s = createTranscriptState();
+    const r = parseLine(s, L.system('compact_boundary', { compactMetadata: { trigger: 'auto' } }), { idPrefix: 'acc:1', now: T0, activities: false });
+    expect(s.stats.compactions).toBe(1);
+    expect(r.activities).toEqual([]);
+  });
+
+  it('COMPACT-03 e COMPACT-04: sem fronteira o campo não existe; outros subtipos e textos parecidos não contam', () => {
+    const s = createTranscriptState();
+    expect('compactions' in s.stats).toBe(false);
+    feed(s, [
+      L.system('api_error', { retryAttempt: 1 }),
+      L.system('turn_duration', { durationMs: 1000 }),
+      L.assistant([L.text('o subtipo compact_boundary aparece neste texto')], { msgId: 'm1' }),
+      'isto não é JSON compact_boundary',
+    ]);
+    expect('compactions' in s.stats).toBe(false);
+    // Só a fronteira de verdade conta (e as anteriores não deixaram resíduo).
+    feed(s, [L.system('compact_boundary')]);
+    expect(s.stats.compactions).toBe(1);
+  });
+});
+
 describe('parseLine — títulos, tarefas e números', () => {
   it('título: custom-title > agent-name > ai-title > último prompt', () => {
     const s = createTranscriptState();
