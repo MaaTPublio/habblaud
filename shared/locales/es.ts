@@ -2610,4 +2610,10 @@ export const ES: Readonly<Record<string, string>> = {
   "No Antigravity, o comando espera aqui até o prazo acabar; sem resposta aqui, o agy mostra o prompt dele.": "En Antigravity, el comando espera aquí hasta que se acabe el plazo; sin respuesta aquí, agy muestra su propio prompt.",
   "O Habblaud solta o pedido agora: responda no prompt do Antigravity": "Habblaud suelta la solicitud ahora: responde en el prompt de Antigravity",
   "Pedido feito às {0}. Sem resposta aqui até {1}, o Antigravity segue sem a decisão do escritório: vale o prompt dele.": "Solicitud hecha a las {0}. Sin respuesta aquí antes de las {1}, Antigravity sigue sin la decisión de la oficina: vale su propio prompt.",
+  "Antigravity CLI": "Antigravity CLI",
+  "ao vivo (statusline do agy)": "en vivo (statusline de agy)",
+  "sem dados: npm run antigravity:install -- --uso": "sin datos: npm run antigravity:install -- --uso",
+  "{0} (semana)": "{0} (semana)",
+  "É o mesmo número do /usage do agy (cota semanal por grupo de modelos), lido do statusline dele.": "Es el mismo número del /usage de agy (cuota semanal por grupo de modelos), leído desde su statusline.",
+  "Para mostrar o uso: npm run antigravity:install -- --uso (acrescenta um statusLine no settings.json do agy, com backup).": "Para mostrar el uso: npm run antigravity:install -- --uso (añade un statusLine al settings.json de agy, con copia de seguridad).",
 };
