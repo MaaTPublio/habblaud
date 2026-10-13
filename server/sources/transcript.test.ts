@@ -495,6 +495,48 @@ describe('janela final + prefixo em segundo plano', () => {
     }
   });
 
+  it('COMPACT-08: mescla as compactações do prefixo e da janela, uma vez cada', async () => {
+    const tmp = tempDir();
+    try {
+      const file = join(tmp.dir, 's.jsonl');
+      const prefixText = [
+        L.system('compact_boundary', { compactMetadata: { trigger: 'auto' } }),
+        L.assistant([L.tool('t1', 'Read', { file_path: '/p/a.ts' })], { msgId: 'p1' }),
+        L.system('compact_boundary', { compactMetadata: { trigger: 'manual' } }),
+      ]
+        .map((l) => `${l}\n`)
+        .join('');
+      const tailText = `${L.system('compact_boundary')}\n`;
+      writeFileSync(file, prefixText + tailText);
+      const end = Buffer.byteLength(prefixText);
+
+      const tail = new FileTail(file);
+      tail.offset = end;
+      const state = createTranscriptState({ trackPrefix: true });
+      for (const line of tail.read().lines) parseLine(state, line, { idPrefix: 'a', now: T0 });
+      expect(state.stats.compactions).toBe(1);
+
+      mergePrefix(state, (await scanPrefix(file, end, new Set(state.firstMsgIds))).state);
+      expect(state.stats.compactions).toBe(3);
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  it('COMPACT-03 e COMPACT-08: prefixo sem fronteira não cria nem altera o campo', () => {
+    const prefix = createTranscriptState();
+    feed(prefix, [L.assistant([L.tool('t1', 'Read', { file_path: '/p/a.ts' })], { msgId: 'p1' })]);
+
+    const comFronteira = createTranscriptState({ trackPrefix: true });
+    feed(comFronteira, [L.system('compact_boundary')]);
+    mergePrefix(comFronteira, prefix);
+    expect(comFronteira.stats.compactions).toBe(1);
+
+    const vazio = createTranscriptState({ trackPrefix: true });
+    mergePrefix(vazio, prefix);
+    expect('compactions' in vazio.stats).toBe(false);
+  });
+
   it.each(['antes', 'depois'])('TaskCreate preserva a tarefa concluída do prefixo quando o resultado chega %s da mesclagem', (quando) => {
     const prefix = createTranscriptState();
     feed(prefix, [

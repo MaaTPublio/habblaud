@@ -843,6 +843,7 @@ export function mergePrefix(state: TranscriptState, prefix: TranscriptState): vo
   state.stats.tokensIn += prefix.stats.tokensIn;
   state.stats.tokensOut += prefix.stats.tokensOut;
   state.stats.subagents += prefix.stats.subagents;
+  if (prefix.stats.compactions) state.stats.compactions = (state.stats.compactions ?? 0) + prefix.stats.compactions;
   if (!state.costSeen && prefix.costSeen) {
     state.costSeen = true;
     if (prefix.stats.costUSD !== undefined) state.stats.costUSD = prefix.stats.costUSD;
