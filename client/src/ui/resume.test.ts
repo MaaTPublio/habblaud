@@ -92,3 +92,22 @@ describe('resumeCommand (Claude Code)', () => {
     expect(resumeCommand(session({ open: true, account: '.claude-conta2' }), conta2)).toBeUndefined();
   });
 });
+
+describe('resumeCommand (Codex)', () => {
+  const codex = (p: Partial<ResumeSession> = {}) => session({ account: '.codex', provider: 'codex', ...p });
+
+  it('conta .codex: cd e codex resume, sem CODEX_HOME', () => {
+    expect(resumeCommand(codex(), undefined)).toBe(`cd '/home/ana/proj' && codex resume ${ID}`);
+  });
+
+  it('outra conta do Codex: CODEX_HOME com a pasta da conta antes do codex', () => {
+    expect(
+      resumeCommand(codex({ account: '.codex-trabalho' }), { id: '.codex-trabalho', configDir: '/home/ana/.codex-trabalho' }),
+    ).toBe(`cd '/home/ana/proj' && CODEX_HOME='/home/ana/.codex-trabalho' codex resume ${ID}`);
+  });
+
+  it('conta do Codex desconhecida e sessão aberta do Codex não geram comando', () => {
+    expect(resumeCommand(codex({ account: '.codex-trabalho' }), undefined)).toBeUndefined();
+    expect(resumeCommand(codex({ open: true }), undefined)).toBeUndefined();
+  });
+});
