@@ -2607,4 +2607,7 @@ export const ES: Readonly<Record<string, string>> = {
   "Cada projeto aberto no Claude Code, no Codex ou no OpenCode vira uma sala (quem trabalha no mesmo projeto divide a sala), e cada sessão aberta é um personagem com nome próprio. ": "Cada proyecto abierto en Claude Code, Codex u OpenCode se convierte en una sala (quien trabaja en el mismo proyecto comparte la sala), y cada sesión abierta es un personaje con nombre propio. ",
   "Para responder, use o terminal do Antigravity": "Para responder, usa la terminal de Antigravity",
   "eventos do Antigravity só são aceitos pelo próprio computador (http://localhost ou http://127.0.0.1)": "Los eventos de Antigravity solo se aceptan desde este mismo equipo (http://localhost o http://127.0.0.1)",
+  "No Antigravity, o comando espera aqui até o prazo acabar; sem resposta aqui, o agy mostra o prompt dele.": "En Antigravity, el comando espera aquí hasta que se acabe el plazo; sin respuesta aquí, agy muestra su propio prompt.",
+  "O Habblaud solta o pedido agora: responda no prompt do Antigravity": "Habblaud suelta la solicitud ahora: responde en el prompt de Antigravity",
+  "Pedido feito às {0}. Sem resposta aqui até {1}, o Antigravity segue sem a decisão do escritório: vale o prompt dele.": "Solicitud hecha a las {0}. Sin respuesta aquí antes de las {1}, Antigravity sigue sin la decisión de la oficina: vale su propio prompt.",
 };
