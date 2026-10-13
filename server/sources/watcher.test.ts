@@ -792,4 +792,30 @@ describe('ClaudeWatcher — compactações', () => {
       c.tmp.cleanup();
     }
   });
+
+  it('COMPACT-07 e COMPACT-11: subagente grande conta as fronteiras do começo do próprio transcript e não soma ao principal', async () => {
+    const c = setup({ tailBytes: 600 });
+    try {
+      writeLines(c.transcript('sess-a'), [
+        L.prompt('Mapeia o projeto', { at: c.now() - 5000 }),
+        L.assistant([L.tool('toolu_s', 'Agent', { description: 'Mapear tudo', subagent_type: 'Explore', prompt: 'x' })], { at: c.now() - 4000 }),
+      ]);
+      c.openSession(902, 'sess-a');
+      c.watcher.boot();
+      const work = Array.from({ length: 12 }, (_, i) => L.assistant([L.tool(`g${i}`, 'Grep', { pattern: `padrao${i}` })], { agentId: 'sg1' }));
+      c.subFile('sess-a', 'sg1', { agentType: 'Explore', description: 'Mapear tudo', toolUseId: 'toolu_s', spawnDepth: 1, requestShape: 'foreground' }, [
+        boundary('auto'),
+        boundary(),
+        ...work,
+      ]);
+      c.poll();
+      await c.watcher.idle();
+      c.poll();
+      expect(c.agent('sess-a:sg1')!.stats.compactions).toBe(2);
+      expect(c.agent('.claude:902')!.stats.compactions).toBeUndefined();
+    } finally {
+      c.watcher.stop();
+      c.tmp.cleanup();
+    }
+  });
 });
