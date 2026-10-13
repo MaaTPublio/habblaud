@@ -2605,4 +2605,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Privacidade: o Habblaud lê só as tabelas de projetos, sessões, mensagens (papel, horário e ferramenta usada), partes e tarefas do banco, mais as perguntas feitas ao usuário. Nunca lê as credenciais, a configuração nem os logs do OpenCode.": "Privacy: Habblaud reads only the database's projects, sessions, messages (role, time and tool used), parts and tasks tables, plus the questions asked to the user. It never reads OpenCode's credentials, configuration or logs.",
   "Uso (cotas): o OpenCode não informa, então não há cartão de uso para ele.": "Usage (quotas): OpenCode doesn't report it, so there's no usage card for it.",
   "Cada projeto aberto no Claude Code, no Codex ou no OpenCode vira uma sala (quem trabalha no mesmo projeto divide a sala), e cada sessão aberta é um personagem com nome próprio. ": "Each project open in Claude Code, Codex or OpenCode becomes a room (everyone working on the same project shares the room), and each open session is a character with its own name. ",
+  "Para responder, use o terminal do Antigravity": "To reply, use the Antigravity terminal",
+  "eventos do Antigravity só são aceitos pelo próprio computador (http://localhost ou http://127.0.0.1)": "Antigravity events are only accepted from this computer (http://localhost or http://127.0.0.1)",
 };

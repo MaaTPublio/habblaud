@@ -649,7 +649,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       // Eventos do hook do Antigravity: só observam, mas só valem vindos do próprio computador (mesma trava do Codex).
       if (method !== 'POST') methodNotAllowed(res, 'POST');
       else if (!isLoopbackHost(req.headers.host) || (!deps.inDocker && !isLoopbackAddress(req.socket.remoteAddress))) {
-        sendJson(res, 403, { error: 'eventos do Antigravity só são aceitos pelo próprio computador (http://localhost ou http://127.0.0.1)' });
+        sendJson(res, 403, { error: tr('eventos do Antigravity só são aceitos pelo próprio computador (http://localhost ou http://127.0.0.1)') });
       } else handleAntigravityEvent(req, res, { live: deps.antigravityLive }).catch((err) => fail(res, err));
       return true;
     }
