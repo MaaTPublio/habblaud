@@ -59,9 +59,10 @@ describe('ferramenta OpenCode no cliente', () => {
 });
 
 describe('terminal por ferramenta', () => {
-  it('só o Claude Code e o Codex têm conversa para o terminal mostrar', () => {
+  it('Claude Code, Codex e Antigravity têm conversa para o terminal mostrar', () => {
     expect(hasTerminal('claude')).toBe(true);
     expect(hasTerminal('codex')).toBe(true);
+    expect(hasTerminal('antigravity')).toBe(true);
     expect(hasTerminal('opencode')).toBe(false);
   });
 

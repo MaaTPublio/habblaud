@@ -40,6 +40,7 @@ import { discoverCodexDirs } from './sources/codex/accounts';
 import { CodexHistory } from './sources/codex/history';
 import { CodexSource } from './sources/codex/source';
 import { AntigravitySource } from './sources/antigravity/source';
+import { AntigravityHistory } from './sources/antigravity/history';
 import { createOpencodeSource } from './sources/opencode/boot';
 import { createBuildReader } from './build';
 import { UpdateChecker } from './updates/checker';
@@ -164,6 +165,7 @@ const history = config.terminal
   ? new HistorySet([new SessionHistory({ accounts: () => accounts.entries(), openAgentOf: (acc, sid) => openMainAgent(office.list(), acc, sid) })])
   : undefined;
 if (history && codex) history.add(new CodexHistory({ accounts: () => accounts.entriesOf('codex'), openAgentOf: (acc, sid) => openMainAgent(office.list(), acc, sid) }));
+if (history && antigravity) history.add(new AntigravityHistory({ home: config.home, accounts: () => accounts.entriesOf('antigravity'), openAgentOf: (acc, sid) => openMainAgent(office.list(), acc, sid) }));
 // Entregas: o fim de cada pedido, lido dos transcripts do histórico (mesma trava do terminal). Os arquivos entregues
 // são lidos aqui (Node, ou pasta de conta montada no Docker) ou pelo auxiliar do host.
 const deliveries = history

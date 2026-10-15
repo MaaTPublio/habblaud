@@ -337,12 +337,12 @@ export function entryTimeTitle(at: number, now: number): string {
 
 /** Quadros do spinner do rodapé de cada ferramenta. */
 export function spinnerFrames(provider: Provider): readonly string[] {
-  return provider === 'codex' ? CODEX_SPINNER : SPINNER;
+  return provider === 'codex' || provider === 'antigravity' ? CODEX_SPINNER : SPINNER;
 }
 
 /** Símbolo parado do rodapé (sem animação, ou fora do "trabalhando"). */
 export function footerGlyph(kind: TerminalFooterKind, provider: Provider): string {
-  if (kind === 'working') return provider === 'codex' ? '•' : '✻';
+  if (kind === 'working') return provider === 'codex' || provider === 'antigravity' ? '•' : '✻';
   return { waiting: '✋', shell: '⏳', idle: '○', ended: '■' }[kind];
 }
 
@@ -378,7 +378,9 @@ export function terminalFooter(agent: AgentInfo | undefined, agents: readonly Ag
       const hint =
         agent.provider === 'codex'
           ? tr('{0} · responda no Codex: este pedido não chegou ao Habblaud ou passou do tempo de espera', [text])
-          : tr('{0} · responda no Claude Code: este pedido não chegou ao Habblaud ou passou do tempo de espera', [text]);
+          : agent.provider === 'antigravity'
+            ? tr('{0} · responda no Antigravity: este pedido não chegou ao Habblaud ou passou do tempo de espera', [text])
+            : tr('{0} · responda no Claude Code: este pedido não chegou ao Habblaud ou passou do tempo de espera', [text]);
       return { kind: 'waiting', text: hint, since: agent.statusSince };
     }
     default:

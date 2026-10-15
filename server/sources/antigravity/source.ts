@@ -96,6 +96,7 @@ export class AntigravitySource implements AgentSource, AntigravityLive {
       this.usageTimer.unref?.();
     }
     if (this.opts.enableDb) {
+      if (this.dbWatcher.isAvailable) this.registerAccount();
       this.dbWatcher.start();
     }
   }
@@ -122,9 +123,11 @@ export class AntigravitySource implements AgentSource, AntigravityLive {
       ? agentId.slice('antigravity:'.length)
       : agentId.startsWith('antigravity-')
         ? agentId.slice('antigravity-'.length)
-        : undefined;
+        : CONVERSATION_ID_RE.test(agentId)
+          ? agentId
+          : undefined;
     if (!convId) return undefined;
-    return this.dbWatcher.transcriptPathOf(convId);
+    return this.dbWatcher.transcriptPathOf(convId.toLowerCase());
   }
 
   /** Parser de terminal para sessões do Antigravity. */

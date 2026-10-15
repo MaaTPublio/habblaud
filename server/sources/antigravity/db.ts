@@ -20,7 +20,7 @@ function getDatabaseSync(): typeof import('node:sqlite').DatabaseSync | undefine
 export function findAntigravityDir(home: string = homedir()): string | undefined {
   for (const candidate of ['.gemini/antigravity-cli', '.gemini/antigravity']) {
     const dir = join(home, candidate);
-    if (existsSync(join(dir, 'conversation_summaries.db'))) return dir;
+    if (existsSync(join(dir, 'conversation_summaries.db')) || existsSync(join(dir, 'brain'))) return dir;
   }
   return undefined;
 }

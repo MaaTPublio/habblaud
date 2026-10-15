@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentInfo } from '../../../shared/types';
 import { composerMode } from './composer-model';
-import { accountChipLabel, accountProvider, emptyOfficeHint, fallbackShort, isAntigravity, PROVIDER_NAME, showsProviderTag } from './provider';
+import { accountChipLabel, accountProvider, emptyOfficeHint, fallbackShort, hasTerminal, isAntigravity, PROVIDER_NAME, showsProviderTag } from './provider';
 
 // O cliente chama o agente de "Antigravity" onde PROVIDER_NAME é usado.
 describe('Antigravity no cliente', () => {
@@ -9,6 +9,7 @@ describe('Antigravity no cliente', () => {
     expect(PROVIDER_NAME.antigravity).toBe('Antigravity');
     expect(isAntigravity({ provider: 'antigravity' })).toBe(true);
     expect(isAntigravity({ provider: 'codex' })).toBe(false);
+    expect(hasTerminal('antigravity')).toBe(true);
     expect(accountProvider({ provider: 'antigravity' }, '.claude')).toBe('antigravity');
     expect(accountProvider(undefined, 'antigravity')).toBe('antigravity');
     expect(accountProvider(undefined, 'demo:antigravity~2')).toBe('antigravity');
