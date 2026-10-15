@@ -32,6 +32,7 @@ import { hash32 } from '../../shared/hash';
 import { applyPermission } from '../permissions/registry';
 import type { NameStore, StoredCharacter } from './names';
 import { normalizeCwd, roomDisplayNames, SlotAllocator } from './rooms';
+import { findProjectLogo } from './project-logo';
 import { tr } from '../../shared/i18n';
 import type { WorldMeta } from '../../shared/world/api';
 
@@ -360,12 +361,12 @@ export class Office {
     this.agents.set(p.id, rec);
     const acc = this.deps.accountName(p.account);
     this.notice('arrive', p.id, 'info', tr('👋 {0} chegou em {1}{2}', [info.name, this.roomName(roomId), acc ? ` (${acc})` : '']), roomId);
-    this.markDirty();
     const peers = [...this.agents.values()].filter((r) => r.info.roomId === roomId && r.info.id !== p.id && r.info.status !== 'offline');
     if (peers.length > 0) {
       const peerNames = peers.map((r) => r.info.name).join(', ');
       this.notice('arrive', p.id, 'info', tr('🤝 {0} agora divide a sala com {1} em {2}', [info.name, peerNames, this.roomName(roomId)]), roomId);
     }
+    this.markDirty();
   }
 
   /** Mesmo processo, sessão nova (/clear, /resume): o personagem continua, tarefas e números zeram. */
@@ -965,14 +966,18 @@ export class Office {
     for (const r of this.demoSnap?.rooms ?? []) entries.set(r.id, { path: r.path, createdAt: r.createdAt });
     this.slots.sync(entries.keys(), now);
     const rooms: RoomInfo[] = [...entries]
-      .map(([id, r]) => ({
-        id,
-        name: this.roomName(id),
-        path: r.path,
-        slot: this.slots.slotOf(id) ?? 0,
-        seed: hash32(id),
-        createdAt: r.createdAt,
-      }))
+      .map(([id, r]) => {
+        const room: RoomInfo = {
+          id,
+          name: this.roomName(id),
+          path: r.path,
+          slot: this.slots.slotOf(id) ?? 0,
+          seed: hash32(id),
+          createdAt: r.createdAt,
+        };
+        if (findProjectLogo(r.path, now)) room.hasLogo = true;
+        return room;
+      })
       .sort((a, b) => a.slot - b.slot);
     // festa/alarme (eventos do GitHub): das salas reais ou do demo
     for (const room of rooms) {

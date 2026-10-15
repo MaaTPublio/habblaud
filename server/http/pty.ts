@@ -1,6 +1,6 @@
 // Rotas do terminal interativo (PtyManager, server/pty/manager.ts):
 //   GET  /api/pty                      estado do recurso e terminais abertos
-//   POST /api/pty                      {cwd, account?, cols?, rows?}: sessão nova do Claude Code
+//   POST /api/pty                      {cwd, account?, provider?, cols?, rows?}: sessão nova do Claude Code, Codex ou Antigravity
 //   GET  /api/pty/:id/stream           SSE: reset (tela guardada) | data | exit
 //   POST /api/pty/:id/input|resize|close
 //   GET  /api/pty/dirs?path=           subpastas de uma pasta ("Abrir projeto"; pty/dirs.ts)

@@ -23,6 +23,8 @@ import type { SpawnService } from '../spawn/spawn';
 import { ATTACHMENT_BODY_MAX, parseAttachment, type AttachmentStore } from '../spawn/attachments';
 import type { SpawnFolder } from '../spawn/folders';
 import { AUDIO_BODY_MAX, type DictationService } from '../dictation/dictation';
+import { findProjectLogo } from '../model/project-logo';
+import { fileStat, sendFile as sendStaticFile, REVALIDATE } from './static';
 import type { DeliveryIndex } from '../deliveries/deliveries';
 import type { FileFetcher } from '../deliveries/fetcher';
 import { HOST_WAIT_MS } from '../host-wait';
@@ -726,6 +728,34 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
             sendJson(res, 200, { name });
           })
           .catch((err) => fail(res, err));
+      return true;
+    }
+    if (path === '/api/rooms/logo') {
+      if (!isRead) {
+        methodNotAllowed(res, 'GET');
+        return true;
+      }
+      const id = url.searchParams.get('id');
+      if (!id) {
+        sendJson(res, 400, { error: tr('id da sala não informado') });
+        return true;
+      }
+      const projectPath = office.roomPath(id);
+      if (!projectPath) {
+        sendJson(res, 404, { error: tr('sala não encontrada') });
+        return true;
+      }
+      const logoFile = findProjectLogo(projectPath);
+      if (!logoFile) {
+        sendJson(res, 404, { error: tr('logo não encontrada') });
+        return true;
+      }
+      const st = fileStat(logoFile);
+      if (!st) {
+        sendJson(res, 404, { error: tr('logo não encontrada') });
+        return true;
+      }
+      sendStaticFile(req, res, logoFile, st, REVALIDATE);
       return true;
     }
     if (path === '/api/stats' || path.startsWith('/api/stats/')) {

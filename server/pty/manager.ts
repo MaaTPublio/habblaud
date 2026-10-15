@@ -2,10 +2,9 @@
 // controla esse terminal (xterm.js). Saída via SSE em GET /api/pty/:id/stream; entrada, redimensionamento e
 // encerramento via POST (rotas em http/pty.ts).
 //
-// Três usos: sessão nova numa pasta; "assumir" uma sessão aberta noutro terminal (o processo de lá é
-// encerrado e a mesma conversa continua aqui com `claude --resume`); e encerrar um agente, esteja ele aqui
-// ou noutro terminal (só processos que o registro de sessões do Claude Code confirma como sessão e cujo início
-// e executável batem com o registro: pty/procinfo.ts).
+// Três usos: sessão nova de Claude Code, Codex ou Antigravity numa pasta; "assumir" uma sessão Claude aberta noutro
+// terminal (o processo de lá é encerrado e a conversa continua aqui com `claude --resume`); e encerrar um agente
+// externo, só quando o registro do Claude Code confirma sessão, PID e executável (pty/procinfo.ts).
 //
 // Segurança: quem controla um terminal destes executa comandos na máquina. O recurso é opt-in (HABBLAUD_PTY=1),
 // as rotas só aceitam conexões do próprio computador (ver http/pty.ts) e ele fica desligado no Docker.
@@ -13,7 +12,7 @@ import { chmodSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import type { PtyInfo, PtyStatus } from '../../shared/types';
+import type { Provider, PtyInfo, PtyStatus } from '../../shared/types';
 import { frame } from '../http/sse';
 import { errMsg, log } from '../log';
 import { pidAlive } from '../sources/registry';
@@ -38,9 +37,10 @@ export type SpawnPty = (file: string, args: string[], opts: { cwd: string; cols:
 
 export interface PtyAccount {
   id: string;
-  /** Pasta de configuração da conta (vira CLAUDE_CONFIG_DIR, exceto a padrão). */
+  /** Pasta de configuração da conta (CLAUDE_CONFIG_DIR ou CODEX_HOME, conforme provedor). */
   dir: string;
   isDefault: boolean;
+  provider?: Provider;
 }
 
 /** O que o gerenciador precisa saber de um agente principal para encerrá-lo ou assumi-lo. */
@@ -71,6 +71,7 @@ export interface PtyManagerOptions {
   /** Por que o recurso está desligado (quando `spawn` é null). */
   disabledReason?: string;
   claudeBin: string;
+  codexBin?: string;
   accounts: () => PtyAccount[];
   agent: (id: string) => PtyAgentRef | undefined;
   onChange: () => void;
@@ -169,7 +170,7 @@ interface SpawnPlan {
   account: PtyAccount;
   cols: number;
   rows: number;
-  provider?: string;
+  provider: Provider;
 }
 
 export class PtyError extends Error {
@@ -222,7 +223,7 @@ export class PtyManager {
     return [...this.ptys.values()].map((t) => ({ ...t.info }));
   }
 
-  /** Abre uma sessão nova (Claude Code ou Antigravity) na pasta (`cwd` absoluto). */
+  /** Abre uma sessão nova (Claude Code, Codex ou Antigravity) na pasta (`cwd` absoluto). */
   create(p: { cwd: unknown; account?: unknown; provider?: unknown; cols?: unknown; rows?: unknown }): PtyInfo {
     return this.spawn(this.plan(p, this.takeovers.size));
   }
@@ -373,10 +374,14 @@ export class PtyManager {
   /** Valida o pedido de uma sessão nova (`reserved`: vagas já prometidas a tomadas em andamento). */
   private plan(p: { cwd: unknown; account?: unknown; provider?: unknown; cols?: unknown; rows?: unknown }, reserved = 0): SpawnPlan {
     if (!this.opts.spawn) throw new PtyError(503, tr('terminal desligado: {0}', [this.opts.disabledReason ?? tr('indisponível')]));
-    const provider = p.provider === 'antigravity' ? 'antigravity' : 'claude';
+    const provider: Provider = p.provider === 'codex' ? 'codex' : p.provider === 'antigravity' ? 'antigravity' : 'claude';
     if (provider === 'antigravity') {
       const agyBin = findExecutable('agy', this.opts.env ?? process.env, process.platform);
       if (!agyBin) throw new PtyError(503, tr('o executável agy do Antigravity não foi encontrado no PATH'));
+    } else if (provider === 'codex') {
+      if (!(this.opts.codexBin ?? findExecutable('codex', this.opts.env ?? process.env, process.platform))) {
+        throw new PtyError(503, tr('o executável do Codex não foi encontrado no PATH'));
+      }
     } else {
       if (!isExecutableFile(this.opts.claudeBin)) throw new PtyError(503, tr('o executável do Claude Code não roda: {0} (confira o HABBLAUD_CLAUDE_BIN)', [this.opts.claudeBin]));
     }
@@ -389,11 +394,12 @@ export class PtyManager {
       // tratado abaixo
     }
     if (!isDir) throw new PtyError(400, tr('pasta não encontrada: {0}', [cwd]));
-    const accounts = this.opts.accounts();
+    const accounts = this.opts.accounts().filter((a) => (a.provider ?? 'claude') === provider);
     let account = typeof p.account === 'string' ? accounts.find((a) => a.id === p.account) : undefined;
     if (!account && provider === 'antigravity') {
       account = { id: 'antigravity', dir: 'antigravity', isDefault: false };
     }
+    if (!account && provider === 'codex') throw new PtyError(503, tr('nenhuma conta do Codex encontrada'));
     if (!account) {
       account = accounts.find((a) => a.isDefault) ?? accounts[0] ?? { id: '.claude', dir: '.claude', isDefault: true };
     }
@@ -408,8 +414,15 @@ export class PtyManager {
     const { cwd, account, cols, rows, provider } = plan;
     const env: NodeJS.ProcessEnv = { ...(this.opts.env ?? process.env), TERM: 'xterm-256color', COLORTERM: 'truecolor' };
     for (const k of INHERITED_SESSION_VARS) delete env[k];
-    if (account.isDefault) delete env.CLAUDE_CONFIG_DIR;
-    else env.CLAUDE_CONFIG_DIR = account.dir;
+    if (provider === 'codex') {
+      delete env.CLAUDE_CONFIG_DIR;
+      delete env.CODEX_THREAD_ID;
+      env.CODEX_HOME = account.dir;
+    } else {
+      delete env.CODEX_THREAD_ID;
+      if (account.isDefault) delete env.CLAUDE_CONFIG_DIR;
+      else env.CLAUDE_CONFIG_DIR = account.dir;
+    }
 
     let proc: PtyProcess;
     try {
@@ -417,16 +430,19 @@ export class PtyManager {
         const bin = findExecutable('agy', env, process.platform) ?? 'agy';
         const args = p.resume ? ['resume', p.resume] : [];
         proc = spawn(bin, args, { cwd, cols, rows, env });
+      } else if (provider === 'codex') {
+        proc = spawn(this.opts.codexBin ?? findExecutable('codex', env, process.platform) ?? 'codex', [], { cwd, cols, rows, env });
       } else {
         const args = p.resume ? ['--resume', p.resume] : [];
         proc = spawn(this.opts.claudeBin, args, { cwd, cols, rows, env });
       }
     } catch (err) {
-      const toolName = provider === 'antigravity' ? 'Antigravity' : 'Claude Code';
+      const toolName = provider === 'codex' ? tr('Codex CLI') : provider === 'antigravity' ? 'Antigravity' : 'Claude Code';
       throw new PtyError(500, tr('não consegui abrir o {0}: {1}', [toolName, errMsg(err)]));
     }
     const id = `p${++this.seq}-${proc.pid}`;
     const info: PtyInfo = { id, pid: proc.pid, cwd, account: account.id, agentId: `${account.id}:${proc.pid}`, startedAt: this.now() };
+    if (provider === 'codex') info.provider = provider;
     if (p.resume) info.resumed = p.resume;
     if (p.from) info.fromAgent = p.from;
     const pty: Pty = { info, proc, screen: this.createScreen(cols, rows), clients: new Set(), pending: new Map() };

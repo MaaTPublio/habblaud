@@ -945,10 +945,11 @@ class RoomView {
     const snap = this.ctx.store.snapshot;
     const agents = (snap?.agents ?? []).filter((a) => a.roomId === r.id);
     const providers: Provider[] = ['claude'];
+    if (snap?.accounts.some((a) => a.provider === 'codex')) providers.push('codex');
     if (snap?.accounts.some((a) => a.provider === 'antigravity')) providers.push('antigravity');
     const providerKey = providers.join(',');
     if (providerKey !== this.providerKey) {
-      const options = providers.map((provider) => h('option', { attrs: { value: provider }, text: provider === 'antigravity' ? tr('Antigravity CLI') : tr('Claude Code') }));
+      const options = providers.map((provider) => h('option', { attrs: { value: provider }, text: provider === 'codex' ? tr('Codex CLI') : provider === 'antigravity' ? tr('Antigravity CLI') : tr('Claude Code') }));
       const selected = this.providerSelect.value as Provider;
       const roomProvider = agents.find((a) => providers.includes(a.provider ?? 'claude'))?.provider ?? 'claude';
       this.providerSelect.replaceChildren(...options);

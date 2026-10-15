@@ -212,6 +212,8 @@ export interface RoomInfo {
   createdAt: number;
   /** Efeito visual temporário na sala (eventos do GitHub detectados nos transcripts; ver shared/github.ts). */
   effect?: RoomEffect;
+  /** A pasta do projeto possui um arquivo de logo/ícone detectado. */
+  hasLogo?: boolean;
 }
 
 /**
@@ -344,7 +346,7 @@ export interface OfficeSnapshot {
   serverTime: number;
   rooms: RoomInfo[];
   agents: AgentInfo[];
-  /** Terminais interativos abertos pelo Habblaud (Claude Code rodando dentro do navegador). */
+  /** Terminais interativos abertos pelo Habblaud (agentes rodando dentro do navegador). */
   ptys?: PtyInfo[];
   /** Contas do Claude detectadas (com uso de 5h/semanal quando disponível). */
   accounts: AccountInfo[];
@@ -725,10 +727,12 @@ export interface PtyStatus {
 /** Terminal interativo aberto pelo Habblaud (node-pty no servidor, xterm.js no navegador). */
 export interface PtyInfo {
   id: string;
-  /** PID do Claude Code: o agente correspondente é `${account}:${pid}` (= agentId). */
+  /** PID do processo iniciado pelo terminal interativo. */
   pid: number;
   cwd: string;
   account: string;
+  provider?: Provider;
+  /** Identificador local do processo PTY; nem sempre coincide com AgentInfo.id. */
   agentId: string;
   /** Sessão retomada (`claude --resume`), quando o terminal assumiu uma sessão que já existia. */
   resumed?: string;

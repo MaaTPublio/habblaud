@@ -61,6 +61,12 @@ import { WorldService } from './world/service';
 import { WorldSettingsStore } from './world/settings';
 import { RoomActivitySync } from './sync/room-activity';
 
+try {
+  process.loadEnvFile?.();
+} catch {
+  // sem .env: continua com as variáveis do ambiente
+}
+
 const config = loadConfig();
 const startedAt = Date.now();
 
@@ -222,8 +228,7 @@ late.permissions = permissions;
 // host (npm run codex:bridge).
 const codexBin = config.messages && !config.inDocker ? findCodexBin(process.env) : undefined;
 const agyBin = config.messages && !config.inDocker ? findAgyBin(process.env) : undefined;
-// Terminal interativo e Novo agente: os dois rodam o Claude Code neste computador, então pedem a mesma liberação,
-// HABBLAUD_PTY=1 (aceita os mesmos valores do HABBLAUD_TERMINAL).
+// Terminal interativo e Novo agente são opt-in local com HABBLAUD_PTY=1 (aceita os mesmos valores do HABBLAUD_TERMINAL).
 const ptyFlag = process.env.HABBLAUD_PTY?.trim();
 const ptyOptIn = isTruthy(ptyFlag);
 // Novo agente pelo escritório (sessão do Claude Code em segundo plano, ou a tela do app do Claude preenchida): a
@@ -258,14 +263,16 @@ late.messages = messages;
 // do Docker, com node-pty e o executável do claude no PATH.
 const claudeBinSetting = process.env.HABBLAUD_CLAUDE_BIN?.trim();
 const claudeBin = claudeBinFrom();
+const codexPtyBin = !config.inDocker ? findCodexBin(process.env) : undefined;
+const agyPtyBin = !config.inDocker ? findAgyBin(process.env) : undefined;
 let spawnPty: SpawnPty | null = null;
 let ptyScreen: ScreenFactory | undefined;
 let ptyOff: string | undefined;
 if (!ptyOptIn) ptyOff = ptyFlag ? tr('desligado por HABBLAUD_PTY={0}', [ptyFlag]) : tr('desligado (ligue com HABBLAUD_PTY=1)');
 else if (config.inDocker) ptyOff = tr('indisponível no Docker (rode com npm start)');
 else if (!config.terminal) ptyOff = tr('mesma trava do terminal ({0})', [terminalOffReason(process.env, config.host, config.inDocker)]);
-else if (!claudeBin) ptyOff = claudeBinSetting ? tr('HABBLAUD_CLAUDE_BIN não encontrado no PATH ({0})', [claudeBinSetting]) : tr('executável "claude" não encontrado no PATH (defina HABBLAUD_CLAUDE_BIN)');
-else if (!isExecutableFile(claudeBin)) ptyOff = tr('o executável do Claude Code não roda: {0} (confira o HABBLAUD_CLAUDE_BIN)', [claudeBin]);
+else if (!claudeBin && !agyPtyBin && !codexPtyBin) ptyOff = claudeBinSetting ? tr('HABBLAUD_CLAUDE_BIN não encontrado no PATH ({0})', [claudeBinSetting]) : tr('nenhum executável de agente ("claude", "agy" ou "codex") encontrado no PATH');
+else if (claudeBin && !isExecutableFile(claudeBin) && !agyPtyBin && !codexPtyBin) ptyOff = tr('o executável do Claude Code não roda: {0} (confira o HABBLAUD_CLAUDE_BIN)', [claudeBin]);
 else {
   const loaded = await loadPty();
   spawnPty = loaded.spawn;
@@ -280,7 +287,12 @@ const ptys = spawnPty
   ? new PtyManager({
       spawn: spawnPty,
       claudeBin: claudeBin ?? 'claude',
-      accounts: () => accounts.entries().map((a) => ({ id: a.id, dir: a.dir, isDefault: isDefaultDir(a.dir, config.home) })),
+      codexBin: codexPtyBin,
+      accounts: () => [
+        ...accounts.entries().map((a) => ({ id: a.id, dir: a.dir, isDefault: isDefaultDir(a.dir, config.home), provider: 'claude' as const })),
+        ...accounts.entriesOf('codex').map((a) => ({ id: a.id, dir: a.dir, isDefault: false, provider: 'codex' as const })),
+        ...(agyPtyBin ? [{ id: 'antigravity', dir: 'antigravity', isDefault: false, provider: 'antigravity' as const }] : []),
+      ],
       agent: (id) => {
         const a = office.get(id);
         return a && { id: a.id, kind: a.kind, account: a.account, sessionId: a.sessionId, cwd: office.roomPath(a.roomId) };
@@ -542,11 +554,11 @@ function shutdown(signal: string): void {
   assets.stop();
   updates.stop();
   world?.stop();
+  roomActivity.stop();
   names.flush();
   void closeVite?.();
   remoteListener?.close();
   server.close(() => process.exit(0));
-  roomActivity.stop();
   setTimeout(() => process.exit(0), 1_500).unref();
 }
 process.on('SIGINT', () => shutdown('SIGINT'));

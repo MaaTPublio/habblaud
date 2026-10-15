@@ -55,9 +55,9 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   abre um Claude Code novo na pasta escolhida, mesmo num projeto que ainda não está no escritório. A lista das pastas
   vem do servidor (`GET /api/pty/dirs`, com a mesma trava do terminal interativo).
 
-- **Contratar na sala** (terminal interativo ligado com `HABBLAUD_PTY=1`): **Contratar agente** abre Claude Code ou Antigravity
-  na pasta da sala e já mostra terminal interativo. Antigravity aparece quando há conta configurada; Codex e OpenCode ainda
-  não iniciam pelo terminal do Habblaud.
+- **Contratar na sala** (terminal interativo ligado com `HABBLAUD_PTY=1`): **Contratar agente** abre Claude Code, Codex
+  ou Antigravity na pasta da sala e já mostra terminal interativo. Codex usa a conta `CODEX_HOME` selecionada.
+  Antigravity aparece quando há conta configurada; OpenCode ainda não inicia pelo terminal do Habblaud.
 
 - **Comandos no terminal ao vivo do Antigravity:** a caixa de entrada de mensagens no rodapé do terminal ao vivo e na gaveta do agente aceita comandos para agentes do Google Antigravity (`agy`), executando-os diretamente na conversa ativa e transmitindo as respostas, raciocínio e chamadas de ferramentas em tempo real.
 

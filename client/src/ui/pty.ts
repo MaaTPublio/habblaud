@@ -1,4 +1,4 @@
-// Terminal interativo: janela flutuante com o Claude Code rodando de verdade (pty no servidor, xterm.js aqui).
+// Terminal interativo: janela flutuante com o agente rodando de verdade (pty no servidor, xterm.js aqui).
 // Ao contrário do terminal ao vivo (ui/terminal.ts, que mostra a conversa), aqui dá para digitar, responder e encerrar.
 // Sessão aberta noutro terminal (ex.: Windows Terminal) abre primeiro no terminal ao vivo, com "Assumir daqui";
 // esta janela só mostra o aviso de "em outro terminal" quando o terminal ao vivo está desligado. As abas trocam
@@ -112,11 +112,22 @@ export class PtyPanel implements UiComponent, PtyControl {
   }
 
   get agentId(): string | null {
-    return this.info?.agentId ?? this.external;
+    return (this.info && (this.agentFor(this.info)?.id ?? this.info.agentId)) ?? this.external;
   }
 
   ptyOf(agentId: string): PtyInfo | undefined {
-    return this.ctx.store.snapshot?.ptys?.find((p) => p.agentId === agentId && p.exitedAt === undefined);
+    return this.ctx.store.snapshot?.ptys?.find((p) => p.exitedAt === undefined && (p.agentId === agentId || this.agentFor(p)?.id === agentId));
+  }
+
+  /** Codex usa thread id no escritório e PID no PTY; associa pela conta, pasta e horário de início. */
+  private agentFor(info: PtyInfo): AgentInfo | undefined {
+    const direct = this.ctx.agent(info.agentId);
+    if (direct || info.provider !== 'codex') return direct;
+    return (this.ctx.store.snapshot?.agents ?? [])
+      .filter((a) => a.kind === 'main' && a.provider === 'codex' && a.account === info.account && a.status !== 'offline' && this.ctx.store.room(a.roomId)?.path === info.cwd)
+      .map((a) => ({ agent: a, delta: Math.abs(a.startedAt - info.startedAt) }))
+      .filter((x) => x.delta <= 30_000)
+      .sort((a, b) => a.delta - b.delta)[0]?.agent;
   }
 
   openAgent(agentId: string): void {
@@ -162,12 +173,12 @@ export class PtyPanel implements UiComponent, PtyControl {
     const fresh = this.ctx.store.snapshot?.ptys?.find((p) => p.id === info.id);
     if (fresh) this.info = fresh;
     const cur = this.info ?? info;
-    const agent: AgentInfo | undefined = this.ctx.agent(cur.agentId);
+    const agent = this.agentFor(cur);
     if (agent && this.pendingSelect === cur.agentId) {
       this.pendingSelect = null;
       this.ctx.select({ type: 'agent', id: agent.id });
     }
-    setText(this.nameEl, agent?.name ?? 'Claude Code');
+    setText(this.nameEl, agent?.name ?? (cur.provider === 'codex' ? tr('Codex CLI') : cur.provider === 'antigravity' ? tr('Antigravity CLI') : tr('Claude Code')));
     updateAccountChip(this.accEl, this.ctx.account(cur.account), cur.account);
     setText(this.roomEl, agent?.title ?? cur.cwd);
     const ended = cur.exitedAt !== undefined;
