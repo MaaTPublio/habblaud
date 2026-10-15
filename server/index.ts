@@ -23,6 +23,8 @@ import { Office } from './model/office';
 import { RoomAliases } from './model/room-aliases';
 import { createPtyRoutes } from './http/pty';
 import { claudeBinFrom, isExecutableFile, loadPty, PtyManager, type ScreenFactory, type SpawnPty } from './pty/manager';
+import { AssetStore } from './assets/store';
+import { createAssetRoutes } from './http/assets';
 import { loadHeadlessScreen } from './pty/screen';
 import { openMainAgent, SessionHistory } from './sources/history';
 import { HistorySet, SourceSet } from './sources/source';
@@ -74,6 +76,8 @@ names.load();
 // Nomes de sala escolhidos pelo usuário (botão direito > Renomear).
 const roomAliases = new RoomAliases(join(config.dataDir, 'rooms.json'));
 roomAliases.load();
+// A pasta de assets do Arquiteto aparece como "Arquiteto" (renomeável como as outras salas).
+roomAliases.setDefault(config.assetsDir, 'Arquiteto');
 
 // Office, contas e fontes de agentes se referenciam (avisos de mudança / fontes): ligação tardia.
 const late: { office?: Office; agents?: SourceSet; permissions?: PermissionRegistry; messages?: MessageRegistry; ptys?: PtyManager; ptyOff?: string } = {};
@@ -120,6 +124,7 @@ const office = new Office({
   permissions: () => late.permissions?.snapshot() ?? new Map(),
   messages: config.messages ? () => late.messages?.reachable() ?? new Set() : undefined,
   ptys: () => (late.ptys ? { status: late.ptys.status(), list: late.ptys.list() } : { status: { enabled: false, reason: late.ptyOff ?? tr('desligado') }, list: [] }),
+  assets: () => assets.meta(),
   updates: () => updates.status(),
   world: () => world?.meta() ?? { enabled: false, configured: false, state: 'off' },
 });
@@ -279,6 +284,8 @@ const ptys = spawnPty
   : undefined;
 late.ptys = ptys;
 late.ptyOff = ptyOff;
+// Assets do usuário (salas, itens e arquitetura criados pelo Arquiteto): observa a pasta e recarrega ao vivo.
+const assets = new AssetStore({ dir: config.assetsDir, port: config.port, onChange: () => office.markDirty() });
 
 if (config.demo) office.setDemo(true);
 // As fontes síncronas (a do Claude Code) terminam o boot aqui, antes de o hub começar a transmitir.
@@ -291,6 +298,7 @@ if (timeline) {
 }
 permissions?.start();
 messages?.start();
+assets.start();
 stats.start();
 updates.start();
 const ticker = setInterval(() => {
@@ -322,6 +330,7 @@ const api = createApiHandler({
   permissions: permissions ? createPermissionRoutes(permissions) : undefined,
   messages: messages ? createMessageRoutes(messages) : undefined,
   pty: ptys ? createPtyRoutes(ptys) : undefined,
+  assets: createAssetRoutes(assets, ptys),
   spawn,
   attachments,
   dictation,
@@ -472,6 +481,7 @@ server.listen(config.port, config.host, () => {
           ? tr('   Novo agente: ligado ({0} --bg; pasta ainda não confiável abre no app do Claude).', [spawnBin])
           : tr('   Novo agente: ligado, só pelo app do Claude (claude não encontrado no PATH).'),
   );
+  log.info(tr('   Assets do usuário (Arquiteto): {0}', [assets.dir]));
   log.info(timeline ? tr('   Linha do tempo (timelapse): gravando em {0}.', [timelineDir]) : tr('   Linha do tempo (timelapse): gravação desligada (HABBLAUD_TIMELINE).'));
   log.info(tr('   Responder pelo escritório: {0}.', [config.terminal ? tr('ligado (precisa do mod: npm run mod:install; ou do hook antigo: npm run hooks:install)') : tr('desligado (mesma trava do terminal)')]));
   log.info(
@@ -522,6 +532,7 @@ function shutdown(signal: string): void {
   permissions?.stop();
   messages?.stop();
   ptys?.stopAll();
+  assets.stop();
   updates.stop();
   world?.stop();
   names.flush();

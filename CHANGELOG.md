@@ -49,6 +49,15 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   abre um Claude Code novo na pasta escolhida, mesmo num projeto que ainda não está no escritório. A lista das pastas
   vem do servidor (`GET /api/pty/dirs`, com a mesma trava do terminal interativo).
 
+- **Arquiteto:** o lápis da barra superior abre um Claude Code (terminal interativo, `HABBLAUD_PTY=1`) numa pasta de
+  assets sua, que cria salas, móveis e mudanças no prédio a pedido; cada arquivo salvo redesenha o escritório. Itens em
+  pixel art (texto ou PNG), salas em `rooms/<id>.json` e qual sala cada projeto usa em `office.json`; o servidor valida
+  e escreve os problemas e um mapa de cada sala no `STATUS.md`. **Exportar** e **Importar** levam salas e itens entre
+  Habblauds num pacote `.habblaud.json` (importar nunca sobrescreve). Ler os assets vale de onde se vê o escritório;
+  importar e abrir o Arquiteto, só pelo próprio computador (nunca pela porta remota). Pasta:
+  `<HABBLAUD_DATA_DIR>/assets` (`HABBLAUD_ASSETS_DIR`).
+
+
 ## [0.11.0] - 2026-10-13
 
 Para atualizar: `git pull` e `npm run docker:up` (ele também atualiza o mod do Habblaud nas contas). O acesso pelo

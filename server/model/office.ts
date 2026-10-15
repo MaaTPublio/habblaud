@@ -24,6 +24,7 @@ import type {
   UpdateStatus,
 } from '../../shared/types';
 import { SHELL_WAIT_TOOL, SPECIAL, type ShellOutcome } from '../../shared/activity';
+import type { AssetsMeta } from '../../shared/assets';
 import { nameKey, type AppearanceParts } from '../../shared/appearance';
 import { DemoSimulator } from '../../shared/demo/simulator';
 import { describeGitHubEvent, githubEventKey, RoomEffects, type GitHubEvent } from '../../shared/github';
@@ -80,6 +81,8 @@ export interface OfficeDeps {
   ptys?: () => { status: PtyStatus; list: PtyInfo[] };
   /** Habblaud World (WorldService.meta; ver OfficeSnapshot.meta.world). */
   world?: () => WorldMeta;
+  /** Resumo dos assets do usuário (ver OfficeSnapshot.meta.assets). */
+  assets?: () => AssetsMeta;
   now?: () => number;
 }
 
@@ -1002,6 +1005,7 @@ export class Office {
         terminal: this.deps.terminal === true,
         messages: this.deps.messages !== undefined,
         ...(ptys ? { pty: ptys.status } : {}),
+        assets: this.deps.assets?.(),
         updates: this.deps.updates?.(),
         ...(this.deps.world ? { world: this.deps.world() } : {}),
       },
