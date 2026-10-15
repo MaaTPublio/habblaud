@@ -2856,4 +2856,19 @@ export const EN: Readonly<Record<string, string>> = {
   "{0} (semana)": "{0} (week)",
   "É o mesmo número do /usage do agy (cota semanal por grupo de modelos), lido do statusline dele.": "It's the same number from agy's /usage (weekly quota per model group), read from its statusline.",
   "Para mostrar o uso: npm run antigravity:install -- --uso (acrescenta um statusLine no settings.json do agy, com backup).": "To show usage: npm run antigravity:install -- --uso (adds a statusLine to agy's settings.json, with a backup).",
+
+  // client/src/ui/projectpicker.ts, server/pty/dirs.ts (Abrir projeto)
+  "↑ Pasta de cima": "↑ Parent folder",
+  "Pastas": "Folders",
+  "Abrir Claude Code aqui": "Open Claude Code here",
+  "Abrir projeto": "Open project",
+  "Escolha a pasta do projeto: o Claude Code abre nela, num terminal interativo.": "Choose the project folder: Claude Code opens in it, in an interactive terminal.",
+  "O Habblaud não respondeu.": "Habblaud didn't respond.",
+  "Nenhuma subpasta.": "No subfolders.",
+  "Pasta grande: mostrando só as primeiras {0} subpastas.": "Large folder: showing only the first {0} subfolders.",
+  "Pasta pessoal": "Home folder",
+  "Escolher uma pasta do computador e abrir o Claude Code nela": "Choose a folder on this computer and open Claude Code in it",
+  "informe um caminho absoluto": "enter an absolute path",
+  "não é uma pasta: {0}": "not a folder: {0}",
+  "não consegui abrir a pasta: {0}": "couldn't open the folder: {0}",
 };

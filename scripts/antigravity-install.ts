@@ -254,7 +254,7 @@ export async function run(opts: RunOptions, ctx: RunContext): Promise<number> {
       out(`✗ não achei o hook do repositório (${ctx.hookPath}).`);
       return 1;
     }
-    if (/[\s"'$`\\]/.test(copy)) {
+    if (/[\s"'$`]/.test(copy)) {
       out(`✗ o caminho ${copy} tem espaço ou aspas, e o agy parte o comando nos espaços sem tirar aspas: o hook não rodaria. Nada foi gravado.`);
       return 1;
     }
@@ -281,7 +281,7 @@ export async function run(opts: RunOptions, ctx: RunContext): Promise<number> {
       if (slSource === undefined) {
         out(`✗ não achei o statusline do repositório; o uso não foi instalado.`);
         failures0++;
-      } else if (/[\s"'$`\\]/.test(slCopy)) {
+      } else if (/[\s"'$`]/.test(slCopy)) {
         out(`✗ o caminho ${slCopy} tem espaço ou aspas: o statusline não rodaria. O uso não foi instalado.`);
         failures0++;
       } else if (parsed === undefined) {

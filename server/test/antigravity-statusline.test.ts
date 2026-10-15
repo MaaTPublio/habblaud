@@ -77,7 +77,7 @@ describe('statusline do Antigravity: o que grava', () => {
     });
   });
 
-  it('o arquivo de cota é legível por todos e gravável só pelo dono (0644), mesmo com umask 0', async () => {
+  it.skipIf(process.platform === 'win32')('o arquivo de cota é legível por todos e gravável só pelo dono (0644), mesmo com umask 0', async () => {
     // umask 000 no processo filho: sem ela, um modo largo demais (0666) seria cortado e passaria despercebido.
     const child = spawn('sh', ['-c', 'umask 000; exec "$0" "$1"', process.execPath, SCRIPT], { env: { ...process.env, HOME: home, HABBLAUD_USAGE_DIR: usage } });
     await new Promise((ok) => {
@@ -95,8 +95,8 @@ describe('statusline do Antigravity: o que grava', () => {
 
   it('a pasta vem de HABBLAUD_USAGE_DIR, senão ~/.habblaud/usage', () => {
     expect(mod.usageDir({ HOME: '/home/ana', HABBLAUD_USAGE_DIR: '/dados/uso' })).toBe('/dados/uso');
-    expect(mod.usageDir({ HOME: '/home/ana' })).toBe('/home/ana/.habblaud/usage');
-    expect(mod.usageDir({ HOME: '/home/ana', HABBLAUD_USAGE_DIR: '  ' })).toBe('/home/ana/.habblaud/usage');
+    expect(mod.usageDir({ HOME: '/home/ana' })).toBe(join('/home/ana', '.habblaud', 'usage'));
+    expect(mod.usageDir({ HOME: '/home/ana', HABBLAUD_USAGE_DIR: '  ' })).toBe(join('/home/ana', '.habblaud', 'usage'));
   });
 
   it('quotaBody: só cotas com número; reset_time longo ou de outro tipo fica de fora; chave e plano cortados; no máximo 12', () => {

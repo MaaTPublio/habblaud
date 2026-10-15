@@ -42,6 +42,13 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
 - O build grava `dist/build.json` com o commit e se a cópia estava modificada (vai junto na conexão com o World, nas
   próximas fases). O `docker-compose.yml` repassa `HABBLAUD_WORLD`, `HABBLAUD_WORLD_URL` e `HABBLAUD_WORLD_DEV`.
 
+### Adicionado
+
+- **Abrir projeto** (com o terminal interativo ligado, `HABBLAUD_PTY=1`): o botão no topo da lista lateral abre uma
+  janela para navegar pelas pastas do computador (pasta pessoal, discos e os projetos do escritório como atalhos) e
+  abre um Claude Code novo na pasta escolhida, mesmo num projeto que ainda não está no escritório. A lista das pastas
+  vem do servidor (`GET /api/pty/dirs`, com a mesma trava do terminal interativo).
+
 ## [0.11.0] - 2026-10-13
 
 Para atualizar: `git pull` e `npm run docker:up` (ele também atualiza o mod do Habblaud nas contas). O acesso pelo
