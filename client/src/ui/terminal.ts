@@ -518,14 +518,17 @@ interface ToolRefs {
 
 function toolRow(t: ToolEntry, now: number, copy: Copier): ToolRefs {
   const { name, args } = splitToolTitle(t.title);
-  const title = h('div', { class: 'ui-term__title' }, h('strong', { text: name }), args ? document.createTextNode(args) : null);
+  const toolName = (t.tool || name || 'tool').toLowerCase();
+  const badge = h('span', { class: `ui-term__tool-badge is-${toolName}`, text: name });
+  const title = h('div', { class: `ui-term__title is-${toolName}` }, badge, args ? document.createTextNode(` ${args.trim()}`) : null);
   const input = toolInput(t);
   // Título + argumentos com o próprio botão de copiar (o comando; sem argumentos, o título).
   const what = t.inputKind === 'command' || t.tool === 'Bash' ? tr('comando') : input ? tr('entrada da ferramenta') : tr('ferramenta');
   const call = h('div', { class: 'ui-term__call' }, title, input, copy(copyTextOf(t), what));
   const slot = h('div', { class: 'ui-term__slot' });
-  const el = row('tool', t.at, now, mark(DOT, 'ui-term__dot'), h('div', { class: 'ui-term__col' }, call, slot));
+  const el = row('tool', t.at, now, mark(DOT, `ui-term__dot is-${toolName}`), h('div', { class: 'ui-term__col' }, call, slot));
   el.classList.add('is-pending');
+  el.classList.add(`is-tool-${toolName}`);
   return { row: el, slot };
 }
 
@@ -539,21 +542,21 @@ function attachResult(refs: ToolRefs, r: ResultEntry, copy: Copier): void {
 function entryRow(e: PlainEntry, now: number, copy: Copier): HTMLElement {
   switch (e.kind) {
     case 'user': {
-      const el = row('user', e.at, now, mark('>'), h('div', { class: 'ui-term__col' }, collapsible(e.text, PROMPT_PREVIEW_LINES, 'ui-term__user-text')));
+      const el = row('user', e.at, now, mark('❯', 'ui-term__user-caret'), h('div', { class: 'ui-term__col' }, collapsible(e.text, PROMPT_PREVIEW_LINES, 'ui-term__user-text')));
       el.append(copy(copyTextOf(e), 'prompt'));
       return el;
     }
     case 'assistant': {
       const body = h('div', { class: 'ui-term__col ui-md' });
       body.append(renderMarkdown(e.text));
-      const el = row('assistant', e.at, now, mark(DOT, 'ui-term__dot'), body);
+      const el = row('assistant', e.at, now, mark(DOT, 'ui-term__dot is-assistant'), body);
       el.append(copy(copyTextOf(e), tr('resposta')));
       return el;
     }
     case 'thinking': {
       const text = e.text?.trim();
       const content = text ? expander(tr('Pensando…'), 'ui-term__think', text, 'ui-term__think-text') : h('span', { class: 'ui-term__think', text: tr('Pensando…'), attrs: { 'data-chrome': '' } });
-      return row('thinking', e.at, now, mark('✻'), h('div', { class: 'ui-term__col' }, content));
+      return row('thinking', e.at, now, mark('✻', 'ui-term__think-glyph'), h('div', { class: 'ui-term__col' }, content));
     }
     case 'system': {
       const text = h('span', { class: 'ui-term__sys-text', text: e.text });
@@ -652,6 +655,9 @@ export class TerminalPanel implements UiComponent, TerminalControl {
   private glyph: HTMLElement;
   private statusText: HTMLElement;
   private statusTime: HTMLElement;
+  private bridgeInfo: HTMLElement;
+  private bridgesBar: HTMLElement;
+  private bridges: { provider: Provider; label: string; fullName: string; deliveryHint: string; btn: HTMLButtonElement; dot: HTMLElement }[] = [];
   /** "Assumir daqui" e "Encerrar" (terminal interativo ligado) e as abas dos agentes do projeto. */
   private actions: TermActions | null;
   private tabs: TermTabs;
@@ -693,7 +699,7 @@ export class TerminalPanel implements UiComponent, TerminalControl {
       close,
     );
 
-    // Barra de ferramentas: filtro (segmentado) e a busca, que aparece com Ctrl/⌘+F ou a lupa.
+    // Barra de ferramentas: filtro (segmentado), seletor de bridges, e busca.
     const filters = h('div', { class: 'ui-seg ui-term__filter', role: 'radiogroup', attrs: { 'aria-label': tr('Filtrar a conversa') } });
     for (const [value, text, hint] of TERMINAL_FILTERS) {
       const b = h('button', { class: 'ui-seg__opt', type: 'button', role: 'radio', text, title: hint, attrs: { 'aria-checked': 'false' } });
@@ -702,6 +708,31 @@ export class TerminalPanel implements UiComponent, TerminalControl {
       this.filterBtns.push(b);
       filters.append(b);
     }
+
+    const bridgeDefs: { provider: Provider; label: string; fullName: string; deliveryHint: string }[] = [
+      { provider: 'antigravity', label: '⚡ agy', fullName: 'Antigravity CLI', deliveryHint: tr('bridge CLI agy direta') },
+      { provider: 'claude', label: '✻ claude', fullName: 'Claude Code', deliveryHint: tr('bridge mod habblaud-mensagens') },
+      { provider: 'codex', label: '⠋ codex', fullName: 'Codex', deliveryHint: tr('bridge codex queue') },
+    ];
+    this.bridgesBar = h('div', { class: 'ui-term__bridges', role: 'toolbar', attrs: { 'aria-label': tr('Bridges de Agentes') } });
+    this.bridges = bridgeDefs.map((b) => {
+      const dot = h('span', { class: 'ui-term__bridge-dot', attrs: { 'aria-hidden': 'true' } });
+      const label = h('span', { class: 'ui-term__bridge-lbl', text: b.label });
+      const btn = h(
+        'button',
+        {
+          class: `ui-term__bridge-btn ui-term__bridge-btn--${b.provider}`,
+          type: 'button',
+          title: `${b.fullName} (${b.deliveryHint})`,
+          on: { click: () => this.switchToBridge(b.provider) },
+        },
+        dot,
+        label,
+      );
+      this.bridgesBar.append(btn);
+      return { ...b, btn, dot };
+    });
+
     const searchIcon = h('span', { class: 'ui-term__search-icon', attrs: { 'aria-hidden': 'true' } });
     searchIcon.innerHTML = ICONS.search;
     this.searchInput = h('input', {
@@ -731,7 +762,7 @@ export class TerminalPanel implements UiComponent, TerminalControl {
       iconButton(ICONS.chevronDown, tr('Próximo resultado (Enter)'), () => this.go(1), 'ui-icon-btn--sm ui-term__step'),
       iconButton(ICONS.close, tr('Fechar a busca (Esc)'), () => this.closeSearch(true), 'ui-icon-btn--sm ui-term__step'),
     );
-    const tools = h('div', { class: 'ui-term__tools' }, filters, this.searchBox);
+    const tools = h('div', { class: 'ui-term__tools' }, filters, this.bridgesBar, this.searchBox);
 
     const retry = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('Tentar de novo'), on: { click: () => this.connect() } });
     this.alertText = h('span', { class: 'ui-term__alert-text', text: OPEN_ERROR });
@@ -746,7 +777,8 @@ export class TerminalPanel implements UiComponent, TerminalControl {
     this.glyph = h('span', { class: 'ui-term__glyph', attrs: { 'aria-hidden': 'true' } });
     this.statusText = h('span', { class: 'ui-term__status-text' });
     this.statusTime = h('span', { class: 'ui-term__status-time' });
-    this.status = h('p', { class: 'ui-term__status' }, this.glyph, this.statusText, this.statusTime);
+    this.bridgeInfo = h('span', { class: 'ui-term__bridge-info' });
+    this.status = h('p', { class: 'ui-term__status' }, this.glyph, this.statusText, this.statusTime, this.bridgeInfo);
     // Esc na caixa devolve o foco à conversa (o próximo fecha o terminal).
     this.composer = new MessageComposer(ctx, 'terminal', { onEscape: () => this.focusLog() });
 
@@ -1353,9 +1385,48 @@ export class TerminalPanel implements UiComponent, TerminalControl {
     setText(this.newBtn, this.unread > 0 ? tr('↓ Novas mensagens') : tr('↓ Ir para o fim'));
   }
 
+  private switchToBridge(provider: Provider): void {
+    const agents = this.ctx.store.snapshot?.agents ?? [];
+    const currentRoomId = this.ctx.agent(this.id ?? '')?.roomId;
+    const candidates = agents.filter(
+      (a) => a.kind === 'main' && a.status !== 'offline' && (a.provider ?? 'claude') === provider,
+    );
+    const target = candidates.find((a) => a.roomId === currentRoomId) ?? candidates[0];
+    if (target) {
+      this.open(target.id);
+    } else {
+      this.ctx.announce(tr('Nenhum agente {0} ativo no escritório.', [provider]));
+    }
+  }
+
   private renderFooter(): void {
     if (this.id === null) return;
     const now = this.ctx.now();
+    const allAgents = this.ctx.store.snapshot?.agents ?? [];
+    const liveAgent = this.session ? undefined : this.ctx.agent(this.id);
+    const currentProv = providerOf(liveAgent ?? this.last);
+
+    // Atualiza botões de bridge
+    for (const b of this.bridges) {
+      const count = allAgents.filter(
+        (a) => a.kind === 'main' && a.status !== 'offline' && (a.provider ?? 'claude') === b.provider,
+      ).length;
+      const isActive = !this.session && currentProv === b.provider;
+      b.btn.classList.toggle('is-active', isActive);
+      b.btn.classList.toggle('is-online', count > 0);
+      b.btn.classList.toggle('is-offline', count === 0);
+      const title =
+        count > 0
+          ? tr('{0}: {1} {2} online · {3} (clique para abrir terminal)', [
+              b.fullName,
+              count,
+              count === 1 ? tr('agente') : tr('agentes'),
+              b.deliveryHint,
+            ])
+          : tr('{0}: offline ({1})', [b.fullName, b.deliveryHint]);
+      setTitle(b.btn, title);
+    }
+
     if (this.session) {
       // Sessão do histórico: horário da última atividade (o transcript pode ter crescido desde a listagem).
       const at = Math.max(this.session.lastAt, this.lastEntryAt);
@@ -1367,12 +1438,15 @@ export class TerminalPanel implements UiComponent, TerminalControl {
       setText(this.statusTime, '');
       setHidden(this.statusTime, true);
       setText(this.glyph, '■');
+      setText(this.bridgeInfo, '');
+      setHidden(this.bridgeInfo, true);
       return;
     }
-    const agent = this.ctx.agent(this.id);
-    const provider = providerOf(agent ?? this.last);
+
+    const agent = liveAgent;
+    const provider = currentProv;
     this.frames = spinnerFrames(provider);
-    const f = terminalFooter(agent, this.ctx.store.snapshot?.agents ?? [], now);
+    const f = terminalFooter(agent, allAgents, now);
     setVariant(this.status, 'is-', f.kind);
     setText(this.statusText, f.text);
     setTitle(this.status, f.text);
@@ -1385,6 +1459,18 @@ export class TerminalPanel implements UiComponent, TerminalControl {
     }
     setText(this.statusTime, time);
     setHidden(this.statusTime, !time);
+
+    const bHint =
+      provider === 'antigravity'
+        ? tr('⚡ bridge agy CLI')
+        : provider === 'codex'
+          ? tr('⠋ bridge codex queue')
+          : provider === 'opencode'
+            ? tr('⬡ bridge opencode')
+            : tr('✻ bridge claude mod');
+    setText(this.bridgeInfo, `[${bHint}]`);
+    setHidden(this.bridgeInfo, false);
+
     if (f.kind === 'working' && !prefersReducedMotion()) this.startSpinner();
     else {
       this.stopSpinner();

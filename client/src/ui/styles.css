@@ -4767,16 +4767,24 @@
   color: var(--ui-accent);
 }
 
-/* Prompt do usuário: "> texto" sobre fundo levemente destacado (alinhado às colunas das outras linhas). */
+/* Prompt do usuário estilo CLI: "❯ texto" sobre fundo sutilmente demarcado com borda ciano */
 .ui-term__row--user {
   margin-inline: -8px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.065);
+  background: rgba(56, 189, 248, 0.06);
+  border-left: 3px solid #38bdf8;
+}
+
+.ui-term__user-caret {
+  color: #38bdf8;
+  font-weight: 700;
+  user-select: none;
 }
 
 .ui-term__row--user .ui-term__col {
-  color: #f0f3fa;
+  color: #f1f5f9;
+  font-weight: 500;
 }
 
 .ui-term__row--assistant .ui-term__dot {
@@ -4798,27 +4806,73 @@
 }
 
 .ui-term__title {
-  color: #c9d1e2;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  color: #cbd5e1;
 }
 
-.ui-term__title strong {
-  font-weight: 700;
-  color: #f3f6fc;
+/* Badges de ferramentas estilo CLI real */
+.ui-term__tool-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font: 700 11px/1.4 var(--font-mono);
+  letter-spacing: 0.03em;
+}
+
+.ui-term__tool-badge.is-bash,
+.ui-term__dot.is-bash {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.ui-term__tool-badge.is-read,
+.ui-term__dot.is-read {
+  background: rgba(96, 165, 250, 0.14);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.ui-term__tool-badge.is-edit,
+.ui-term__dot.is-edit {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.ui-term__tool-badge.is-write,
+.ui-term__dot.is-write {
+  background: rgba(45, 212, 191, 0.14);
+  color: #2dd4bf;
+  border: 1px solid rgba(45, 212, 191, 0.3);
+}
+
+.ui-term__tool-badge.is-search,
+.ui-term__tool-badge.is-web,
+.ui-term__dot.is-search,
+.ui-term__dot.is-web {
+  background: rgba(192, 132, 252, 0.14);
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.3);
 }
 
 .ui-term__in {
   margin-top: 4px;
   padding: 5px 9px;
   border-radius: 5px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--ui-line);
-  color: #c3cbdc;
+  background: #080c14;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
 }
 
 .ui-term__in--command {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 1ch;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .ui-term__in--command .ui-term__more {
@@ -4826,13 +4880,14 @@
 }
 
 .ui-term__dollar {
-  color: var(--st-working);
+  color: #4ade80;
+  font-weight: 700;
   user-select: none;
 }
 
 .ui-term__in--json,
 .ui-term__in--text {
-  color: var(--term-dim);
+  color: #94a3b8;
 }
 
 .ui-term__in--diff {
@@ -4849,35 +4904,46 @@
 }
 
 .ui-term__dl.is-add {
-  background: rgba(79, 209, 139, 0.13);
-  color: #a6ecc4;
+  background: rgba(74, 222, 128, 0.12);
+  color: #86efac;
 }
 
 .ui-term__dl.is-del {
-  background: rgba(255, 107, 107, 0.13);
-  color: #ffb3aa;
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
 }
 
 .ui-term__dl.is-hunk {
-  color: #8fb8ff;
+  background: rgba(56, 189, 248, 0.08);
+  color: #38bdf8;
+  font-weight: 600;
 }
 
-/* "  ⎿  resultado" */
+/* "  ⎿  resultado" estilo CLI */
 .ui-term__result {
   display: grid;
   grid-template-columns: 3ch minmax(0, 1fr);
-  margin-top: 2px;
-  color: #a9b2c4;
+  margin-top: 4px;
+  color: #cbd5e1;
 }
 
 .ui-term__result.is-error {
-  color: #ff9b8f;
+  color: #fca5a5;
 }
 
 .ui-term__elbow {
   padding-left: 0.5ch;
-  color: var(--term-dim);
+  color: rgba(255, 255, 255, 0.3);
+  font-family: var(--font-mono);
   user-select: none;
+}
+
+.ui-term__res-text {
+  background: #080c14;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
 }
 
 .ui-term__out {
@@ -5481,6 +5547,128 @@ button.ui-term__think:hover,
   padding: 0 10px;
   font-size: 11.5px;
   white-space: nowrap;
+}
+
+/* Seletor de Bridges no terminal ao vivo */
+.ui-term__bridges {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ui-term__bridge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs, 4px);
+  border: 1px solid var(--ui-line-strong);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--term-dim);
+  font: 600 11px/1 var(--font-mono);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.ui-term__bridge-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ui-term__bridge-btn.is-active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+}
+
+.ui-term__bridge-btn--antigravity.is-active {
+  border-color: #60a5fa;
+  color: #93c5fd;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.25);
+}
+
+.ui-term__bridge-btn--claude.is-active {
+  border-color: #fb923c;
+  color: #fdba74;
+  box-shadow: 0 0 8px rgba(251, 146, 60, 0.25);
+}
+
+.ui-term__bridge-btn--codex.is-active {
+  border-color: #34d399;
+  color: #6ee7b7;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.25);
+}
+
+.ui-term__bridge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  flex: none;
+  transition: background 0.15s;
+}
+
+.ui-term__bridge-btn.is-online .ui-term__bridge-dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+
+.ui-term__bridge-btn.is-offline {
+  opacity: 0.55;
+}
+
+/* Informação de Bridge no statusline do rodapé */
+.ui-term__bridge-info {
+  margin-left: auto;
+  font: 11px/1 var(--font-mono);
+  color: #7dd3fc;
+  letter-spacing: 0.02em;
+}
+
+/* Pílula de bridge no prompt de input do terminal */
+.ui-term__bridge-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--ui-line-strong);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--term-dim);
+  font: 700 11px/1 var(--font-mono);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.ui-term__bridge-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: var(--ui-accent);
+}
+
+.ui-term__bridge-pill--antigravity {
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.ui-term__bridge-pill--claude {
+  color: #fdba74;
+  border-color: rgba(251, 146, 60, 0.35);
+  background: rgba(249, 115, 22, 0.12);
+}
+
+.ui-term__bridge-pill--codex {
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(16, 185, 129, 0.12);
 }
 
 .ui-term__find .ui-px-icon {

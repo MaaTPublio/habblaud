@@ -180,3 +180,22 @@ export function timeoutError(provider: Provider = 'claude'): string {
   if (provider === 'antigravity') return ANTIGRAVITY_TIMEOUT_ERROR;
   return provider === 'opencode' ? OPENCODE_TIMEOUT_ERROR : provider === 'codex' ? CODEX_TIMEOUT_ERROR : TIMEOUT_ERROR;
 }
+
+export interface BridgeCommand {
+  bridge?: Provider;
+  text: string;
+}
+
+/**
+ * Detecta comandos de redirecionamento ou chaveamento de bridge no terminal ao vivo:
+ * Ex.: "/agy rodar testes", "/claude continuar", "/codex revisar", ou "/agy" (apenas trocar terminal).
+ */
+export function parseBridgeCommand(raw: string): BridgeCommand {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^\/(agy|antigravity|claude|codex|opencode)(?:\s+(.*)|\s*$)/i);
+  if (!match) return { text: raw };
+  const cmd = match[1].toLowerCase();
+  const bridge: Provider = cmd === 'agy' || cmd === 'antigravity' ? 'antigravity' : (cmd as Provider);
+  const text = (match[2] ?? '').trim();
+  return { bridge, text };
+}

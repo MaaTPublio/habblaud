@@ -1523,6 +1523,8 @@ export const FR: Readonly<Record<string, string>> = {
   "renomear salas desligado: só funciona com o Habblaud acessível apenas pelo próprio computador": "renommage des salles désactivé : il ne fonctionne que si Habblaud n'est accessible que depuis l'ordinateur lui-même",
   "renomear salas só pelo próprio computador (http://localhost)": "renommage des salles uniquement depuis l'ordinateur lui-même (http://localhost)",
   "sala não encontrada": "salle introuvable",
+  "id da sala não informado": "identifiant de salle non fourni",
+  "logo não encontrada": "logo introuvable",
   "rota desconhecida": "route inconnue",
 
   // server/http/guard.ts

@@ -403,6 +403,60 @@ describe('GET /api/mod/summary (mod do Claude Code)', () => {
   });
 });
 
+describe('GET /api/rooms/logo', () => {
+  let env: Env & { cleanup: () => void };
+
+  beforeEach(async () => {
+    env = await start();
+  });
+  afterEach(async () => {
+    await env.close();
+    env.cleanup();
+  });
+
+  it('400 sem id', async () => {
+    const res = await fetch(`${env.base}/api/rooms/logo`);
+    expect(res.status).toBe(400);
+  });
+
+  it('404 sala inexistente', async () => {
+    const res = await fetch(`${env.base}/api/rooms/logo?id=nao-existe`);
+    expect(res.status).toBe(404);
+  });
+
+  it('404 sala sem logo', async () => {
+    const res = await fetch(`${env.base}/api/rooms/logo?id=%2Fp%2Floja`);
+    expect(res.status).toBe(404);
+  });
+
+  it('200 com imagem quando o projeto possui logo', async () => {
+    const tmp = tempDir();
+    try {
+      const cwd = tmp.dir.replace(/\\/g, '/');
+      const logoFile = join(tmp.dir, 'logo.png');
+      writeFileSync(logoFile, 'png-bytes');
+      env.office.addMain({ id: '.claude:2', account: '.claude', sessionId: 's2', cwd, role: 'Agente principal', startedAt: Date.now(), status: 'working' });
+      const snap = await snapshotOf(env.base);
+      const room = snap.rooms.find((r) => r.path === cwd);
+      expect(room).toBeDefined();
+      expect(room?.hasLogo).toBe(true);
+
+      const res = await fetch(`${env.base}/api/rooms/logo?id=${encodeURIComponent(room!.id)}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('image/png');
+      expect(await res.text()).toBe('png-bytes');
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  it('405 para POST', async () => {
+    const res = await fetch(`${env.base}/api/rooms/logo?id=%2Fp%2Floja`, { method: 'POST', headers: JSON_HEADERS, body: '{}' });
+    expect(res.status).toBe(405);
+    expect(res.headers.get('allow')).toBe('GET');
+  });
+});
+
 describe('guarda de Host/Origin', () => {
   const allowed = parseAllowedHosts(' Meu-Mac.local:4747 , habblaud.lan ');
 

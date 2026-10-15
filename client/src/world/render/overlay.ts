@@ -14,6 +14,7 @@ import type { Sim } from '../sim/sim';
 import { buildAnim } from './anim';
 import { drawFxBanner } from './github-fx';
 import type { HeadInfo, Renderer } from './renderer';
+import { ProjectLogos } from './project-logos';
 import { tr } from '../../../../shared/i18n';
 
 // A Pixelify Sans tem o "C" maiúsculo quase fechado (lê-se "Oopa" em vez de "Copa") em qualquer
@@ -200,6 +201,8 @@ export class Overlay {
   private oy = 0;
   private zoom = 1;
 
+  readonly logos = new ProjectLogos();
+
   constructor(
     private readonly ctx: CanvasRenderingContext2D,
     private readonly sim: Sim,
@@ -211,6 +214,7 @@ export class Overlay {
   resetCaches(): void {
     this.widths.clear();
     this.fitted.clear();
+    this.logos.clear();
   }
 
   private measure(font: string, text: string): number {
@@ -425,7 +429,8 @@ export class Overlay {
         const w = rect.w * zoom;
         const h = rect.h * zoom;
         if (ax + w > 0 && ax < vw && ay + h > 0 && ay < vh) {
-          this.drawSignText(text, ax, ay, w, h, this.renderer.signIsDark(vis), room?.accounts ?? []);
+          const logo = room ? this.logos.get(room.id, room.info.hasLogo) : null;
+          this.drawSignText(text, ax, ay, w, h, this.renderer.signIsDark(vis), room?.accounts ?? [], logo);
           this.place(ax, ay, w, h);
         }
       }
@@ -436,7 +441,8 @@ export class Overlay {
       if (room) {
         // endereço antigo de uma mudança: o nome já está na sala nova
         if (!room.present || room.ghost || (anim && anim.walls < 0.6)) continue;
-        this.drawRoomPill(room.info.name, cx, cy, colW - 8, room.accounts, this.countIn(room.id), room.theme.accent, room.lightOn);
+        const logo = this.logos.get(room.id, room.info.hasLogo);
+        this.drawRoomPill(room.info.name, cx, cy, colW - 8, room.accounts, this.countIn(room.id), room.theme.accent, room.lightOn, logo);
       } else if (CORE_NAMES[vis.id]) {
         this.drawCorePill(CORE_NAMES[vis.id], cx, cy, colW - 8);
       }
@@ -472,24 +478,49 @@ export class Overlay {
     return n;
   }
 
-  private drawSignText(text: string, x: number, y: number, w: number, h: number, dark: boolean, accounts: string[]): void {
+  private drawSignText(text: string, x: number, y: number, w: number, h: number, dark: boolean, accounts: string[], logo?: HTMLImageElement | null): void {
     const { ctx } = this;
+    const hasLogo = !!(logo && logo.naturalWidth > 0 && logo.naturalHeight > 0);
+    let iconW = 0;
+    let iconH = 0;
+    const gap = 4;
+    if (hasLogo) {
+      iconH = Math.min(Math.round(h * 0.75), 18);
+      const aspect = logo.naturalWidth / (logo.naturalHeight || 1);
+      iconW = Math.min(iconH * 1.5, Math.max(6, Math.round(iconH * aspect)));
+    }
+    const availW = hasLogo ? w - iconW - gap - 4 : w - 4;
+
     // encolhe a fonte até 7px; abaixo disso, corta com reticências
     let size = Math.min(18, Math.max(7, Math.floor(h * 0.72)));
     let font = signFont(size);
-    while (size > 7 && this.measure(font, text) > w - 4) {
+    while (size > 7 && this.measure(font, text) > availW) {
       size--;
       font = signFont(size);
     }
-    const t = this.fit(font, text, w - 4);
-    ctx.font = font;
-    ctx.textAlign = 'center';
-    const cx = Math.round(x + w / 2);
+    const t = this.fit(font, text, availW);
+    const tw = this.measure(font, t);
+
+    const totalW = hasLogo ? iconW + gap + tw : tw;
+    const startX = Math.round(x + (w - totalW) / 2);
     const cy = Math.round(y + h / 2) + 0.5;
+
+    if (hasLogo) {
+      const iconY = Math.round(cy - iconH / 2);
+      ctx.save();
+      ctx.imageSmoothingEnabled = logo.naturalWidth > 24 || logo.naturalHeight > 24;
+      ctx.drawImage(logo, startX, iconY, iconW, iconH);
+      ctx.restore();
+    }
+
+    const textX = hasLogo ? startX + iconW + gap : startX;
+    ctx.font = font;
+    ctx.textAlign = 'left';
     ctx.fillStyle = dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.45)';
-    ctx.fillText(t, cx, cy + 1);
+    ctx.fillText(t, textX, cy + 1);
     ctx.fillStyle = dark ? '#f5f1e6' : '#26303e';
-    ctx.fillText(t, cx, cy);
+    ctx.fillText(t, textX, cy);
+
     ctx.textAlign = 'left';
     // contas presentes: bolinhas na cor da conta, no canto da placa
     const r = Math.max(2.5, Math.min(4, h * 0.22));
@@ -507,16 +538,18 @@ export class Overlay {
     }
   }
 
-  private drawRoomPill(name: string, cx: number, cy: number, maxW: number, accounts: string[], count: number, accent: string, lit: boolean): void {
+  private drawRoomPill(name: string, cx: number, cy: number, maxW: number, accounts: string[], count: number, accent: string, lit: boolean, logo?: HTMLImageElement | null): void {
     const { ctx } = this;
+    const hasLogo = !!(logo && logo.naturalWidth > 0 && logo.naturalHeight > 0);
+    const logoW = hasLogo ? 16 : 0;
     let dots = accounts.filter((a) => this.sim.accounts.has(a));
     let countText = count > 0 ? String(count) : '';
     let cw = countText ? this.measure(LABEL_FONT, countText) + 14 : 0;
     // nome cortado para caber na largura da coluna; com pouco espaço, o nome vale mais que a
     // contagem e as bolinhas; sem espaço nem para 3 letras, pílula compacta (só contagem)
-    let text = this.fit(ROOM_FONT, name, Math.min(180, maxW - (18 + dots.length * 10 + cw)));
+    let text = this.fit(ROOM_FONT, name, Math.min(180, maxW - (18 + dots.length * 10 + cw + logoW)));
     if (text.length < Math.min(7, name.length)) {
-      const alone = this.fit(ROOM_FONT, name, maxW - 18);
+      const alone = this.fit(ROOM_FONT, name, maxW - (18 + logoW));
       if (alone.length >= 4) {
         text = alone;
         dots = [];
@@ -524,7 +557,7 @@ export class Overlay {
         cw = 0;
       }
     }
-    const extras = 18 + dots.length * 10 + cw;
+    const extras = 18 + dots.length * 10 + cw + logoW;
     // Só vira pílula compacta quando o nome precisou ser cortado (nomes curtos como "app" cabem inteiros).
     const compact = text !== name && text.length < 4;
     const tw = compact ? 0 : this.measure(ROOM_FONT, text);
@@ -547,11 +580,20 @@ export class Overlay {
     ctx.roundRect(x, y, 4, h, [7, 0, 0, 7]);
     ctx.fill();
     let dx = x + 10;
+    if (!compact && hasLogo) {
+      const iconSize = 12;
+      const iconY = Math.round(y + (h - iconSize) / 2);
+      ctx.save();
+      ctx.imageSmoothingEnabled = logo.naturalWidth > 24 || logo.naturalHeight > 24;
+      ctx.drawImage(logo, dx, iconY, iconSize, iconSize);
+      ctx.restore();
+      dx += iconSize + 4;
+    }
     if (!compact) {
       ctx.font = ROOM_FONT;
       ctx.fillStyle = '#f3f5fa';
-      ctx.fillText(text, x + 10, y + h / 2 + 1);
-      dx = x + 10 + tw + 8;
+      ctx.fillText(text, dx, y + h / 2 + 1);
+      dx += tw + 8;
     }
     for (const id of dots) {
       accountDot(ctx, dx + 3, y + h / 2, 3.5, this.sim.accounts.get(id)!);

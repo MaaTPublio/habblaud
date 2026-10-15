@@ -138,4 +138,26 @@ describe('createAntigravityTerminalParser', () => {
     expect(parser.push('   \n')).toEqual([]);
     expect(parser.push('{ invalid json')).toEqual([]);
   });
+
+  it('filtra ruídos internos de SYSTEM_MESSAGE e checkpoints técnicos', () => {
+    const parser = createAntigravityTerminalParser();
+    const noisy = parser.push(
+      JSON.stringify({
+        step_index: 99,
+        type: 'SYSTEM_MESSAGE',
+        content: '<SYSTEM_MESSAGE> not actually sent by the user. You are running a task.',
+      }),
+    );
+    expect(noisy).toEqual([]);
+
+    const valid = parser.push(
+      JSON.stringify({
+        step_index: 100,
+        type: 'SYSTEM_MESSAGE',
+        content: 'Workspace updated successfully',
+      }),
+    );
+    expect(valid).toHaveLength(1);
+    expect(valid[0].kind).toBe('system');
+  });
 });

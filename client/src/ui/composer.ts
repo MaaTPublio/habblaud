@@ -16,6 +16,7 @@ import {
   LOST_ERROR,
   messageText,
   OFFLINE_ERROR,
+  parseBridgeCommand,
   POLL_LIMIT_MS,
   pollDelay,
   sendStatusText,
@@ -55,6 +56,7 @@ export class MessageComposer {
   private row: HTMLElement;
   private box: HTMLTextAreaElement;
   private sendBtn: HTMLButtonElement;
+  private bridgePill: HTMLElement | null = null;
   private hint: HTMLElement;
   private tip: HTMLElement | null;
   private status: HTMLElement;
@@ -103,7 +105,18 @@ export class MessageComposer {
     this.dictate.el.classList.add('ui-msg__mic');
     setHidden(this.dictate.el, true);
     this.row = h('div', { class: `ui-msg__row${term ? ' ui-term__prompt ui-term__prompt--mic' : ''}` });
-    if (term) this.row.append(h('span', { class: 'ui-term__caret', text: '>', attrs: { 'aria-hidden': 'true' } }));
+    if (term) {
+      this.bridgePill = h('button', {
+        class: 'ui-term__bridge-pill',
+        type: 'button',
+        title: tr('Bridge ativa (clique para alternar de agente/bridge)'),
+        on: { click: () => this.cycleBridge() },
+      });
+      this.row.append(
+        h('span', { class: 'ui-term__caret', text: '❯', attrs: { 'aria-hidden': 'true' } }),
+        this.bridgePill,
+      );
+    }
     this.row.append(this.box, this.dictate.el, this.sendBtn);
     // Clique na "linha do prompt" (fora do botão) põe o cursor na caixa, como num terminal.
     this.row.addEventListener('mousedown', (e) => {
@@ -147,12 +160,30 @@ export class MessageComposer {
     }
     this.box.disabled = !ready;
     const name = agent?.name ?? tr('o agente');
-    const placeholder = ready ? (term ? tr('Mensagem para {0} (Enter manda, Shift+Enter quebra a linha)', [name]) : tr('Mensagem para {0}…', [name])) : mode.text;
+    const placeholder = ready
+      ? (term
+        ? tr('Mensagem para {0} (ou /agy, /claude, /codex) · Enter manda', [name])
+        : tr('Mensagem para {0}…', [name]))
+      : mode.text;
     setAttr(this.box, 'placeholder', placeholder);
     setAttr(this.box, 'aria-label', ready ? tr('Mensagem para {0}', [name]) : mode.text);
     setTitle(this.box, ready ? '' : mode.text);
     this.row.classList.toggle('is-disabled', !ready);
     setHidden(this.sendBtn, !ready);
+
+    if (this.bridgePill) {
+      const glyph =
+        this.provider === 'antigravity'
+          ? '⚡ agy'
+          : this.provider === 'codex'
+            ? '⠋ codex'
+            : this.provider === 'opencode'
+              ? '⬡ opencode'
+              : '✻ claude';
+      setText(this.bridgePill, `${glyph} ▾`);
+      this.bridgePill.className = `ui-term__bridge-pill ui-term__bridge-pill--${this.provider}`;
+      setTitle(this.bridgePill, tr('Bridge ativa: {0} (clique para alternar agente/bridge)', [this.provider]));
+    }
     // Consulta em cache (30 s): o Mac pode instalar o Whisper ou parar o auxiliar com a página aberta.
     void dictationAvailable().then((ok) => {
       if (ok === this.canDictate) return;
@@ -245,24 +276,74 @@ export class MessageComposer {
     this.ctx.invalidate();
   }
 
-  private async send(): Promise<void> {
-    const agentId = this.agentId;
-    const raw = this.box.value;
-    if (this.mode.kind !== 'ready' || !canSend(raw) || this.states.get(agentId)?.phase === 'sending') return;
-    this.providers.set(agentId, this.provider);
+  private cycleBridge(): void {
+    const agents = (this.ctx.store.snapshot?.agents ?? []).filter(
+      (a) => a.kind === 'main' && a.status !== 'offline',
+    );
+    if (agents.length <= 1) return;
+    const idx = agents.findIndex((a) => a.id === this.agentId);
+    const next = agents[(idx + 1) % agents.length];
+    if (next) this.ctx.terminals?.open(next.id);
+  }
+
+  private async dispatchTo(agentId: string, text: string, prov: Provider): Promise<void> {
+    this.providers.set(agentId, prov);
     this.setState(agentId, { phase: 'sending', at: Date.now() });
     let r: { message: OutboxMessage } | { error: string };
     try {
-      r = await this.ctx.store.sendMessage(agentId, messageText(raw));
+      r = await this.ctx.store.sendMessage(agentId, messageText(text));
     } catch {
       r = { error: OFFLINE_ERROR };
     }
     if ('error' in r) {
-      // Recusada: o texto continua na caixa para tentar de novo.
       this.setState(agentId, { phase: 'rejected', error: r.error, at: Date.now() });
       return;
     }
-    // Na fila: a caixa esvazia (a não ser que você tenha continuado a escrever enquanto o envio ia).
+    const m = r.message;
+    this.setState(agentId, { phase: m.status, id: m.id, error: m.error, at: Date.now() });
+    if (!isSettled(m.status)) this.poll(agentId, m.id, Date.now());
+  }
+
+  private async send(): Promise<void> {
+    const raw = this.box.value;
+    if (this.mode.kind !== 'ready' || !canSend(raw) || this.states.get(this.agentId)?.phase === 'sending') return;
+
+    // Comando rápido de bridge (/agy, /claude, /codex, /opencode)
+    const cmd = parseBridgeCommand(raw);
+    if (cmd.bridge) {
+      const agents = this.ctx.store.snapshot?.agents ?? [];
+      const currentRoomId = this.ctx.agent(this.agentId)?.roomId;
+      const candidates = agents.filter(
+        (a) => a.kind === 'main' && a.status !== 'offline' && (a.provider ?? 'claude') === cmd.bridge,
+      );
+      const target = candidates.find((a) => a.roomId === currentRoomId) ?? candidates[0];
+
+      if (!target) {
+        this.setState(this.agentId, {
+          phase: 'rejected',
+          error: tr('Nenhum agente {0} ativo no escritório', [cmd.bridge]),
+          at: Date.now(),
+        });
+        return;
+      }
+
+      this.drafts.delete(this.agentId);
+      this.box.value = '';
+      this.resize();
+
+      if (!cmd.text) {
+        // Apenas alterna para o terminal daquele agente
+        this.ctx.terminals?.open(target.id);
+        return;
+      }
+
+      // Abre o terminal daquele agente e envia pela bridge correspondente
+      this.ctx.terminals?.open(target.id);
+      await this.dispatchTo(target.id, cmd.text, cmd.bridge);
+      return;
+    }
+
+    const agentId = this.agentId;
     if ((this.drafts.get(agentId) ?? '') === raw) {
       this.drafts.delete(agentId);
       if (this.agentId === agentId && this.box.value === raw) {
@@ -270,9 +351,7 @@ export class MessageComposer {
         this.resize();
       }
     }
-    const m = r.message;
-    this.setState(agentId, { phase: m.status, id: m.id, error: m.error, at: Date.now() });
-    if (!isSettled(m.status)) this.poll(agentId, m.id, Date.now());
+    await this.dispatchTo(agentId, raw, this.provider);
   }
 
   /** Consulta a situação até ela se resolver (ou o prazo acabar). Para quando outro envio toma a linha de situação. */

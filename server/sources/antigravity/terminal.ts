@@ -170,15 +170,18 @@ export function createAntigravityTerminalParser(): TerminalParser {
 
         // Mensagens de sistema
         if ((step.type === 'SYSTEM_MESSAGE' || step.type === 'CHECKPOINT') && typeof step.content === 'string' && step.content.trim()) {
-          const id = `agy:s:${stepIdx}`;
-          if (!seen.has(id)) {
-            seen.add(id);
-            entries.push({
-              kind: 'system',
-              id,
-              at,
-              text: maskSecrets(truncate(step.content, TEXT_MAX)),
-            });
+          const content = step.content.trim();
+          if (!content.includes('not actually sent by the user') && !content.startsWith('checkpoint:')) {
+            const id = `agy:s:${stepIdx}`;
+            if (!seen.has(id)) {
+              seen.add(id);
+              entries.push({
+                kind: 'system',
+                id,
+                at,
+                text: maskSecrets(truncate(content, TEXT_MAX)),
+              });
+            }
           }
         }
 

@@ -10,6 +10,12 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Logos dos projetos nas salas
+
+- **Detecção automática na pasta do projeto aberta:** o servidor identifica a identidade visual do projeto aberto procurando por arquivos como `logo.png`, `logo.svg`, `icon.png`, `icon.svg`, `public/logo.png`, `assets/logo.png`, `.github/logo.png`, entre outros formatos comuns diretamente no diretório do projeto.
+- **Logo em miniatura na placa da sala:** na visualização do escritório, a logo é desenhada em miniatura diretamente na placa de madeira da sala ao lado do nome do projeto (e também na pílula flutuante da sala quando a visão está afastada).
+- **Rota estática segura:** rota `GET /api/rooms/logo?id=<id>` com suporte a cache ETag, 304 Not Modified, revalidação rápida e bloqueio a path traversal.
+
 ### Multi-agente: mesma sala no Windows e sincronização de atividades
 
 - **Salas unificadas no Windows:** caminhos com barras invertidas (`\`), barras normais (`/`), letras de drive minúsculas ou maiúsculas (`c:` vs `C:`) e caminhos canônicos caem na mesma sala. Agentes do Antigravity (`agy`) e Codex na mesma pasta agora compartilham a mesma sala do escritório.

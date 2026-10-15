@@ -12,6 +12,7 @@ import {
   enterSends,
   isSettled,
   messageText,
+  parseBridgeCommand,
   PLUGIN_HINT,
   pollDelay,
   sendStatusText,
@@ -148,5 +149,19 @@ describe('caixa de mensagem (peças puras)', () => {
     expect(pollDelay(0)).toBeLessThan(1_000);
     expect(pollDelay(20_000)).toBeGreaterThan(pollDelay(0));
     expect(pollDelay(60_000)).toBeGreaterThanOrEqual(pollDelay(20_000));
+  });
+
+  it('parseBridgeCommand: reconhece prefixos de bridge para AGY, Claude, Codex e OpenCode', () => {
+    expect(parseBridgeCommand('/agy npm test')).toEqual({ bridge: 'antigravity', text: 'npm test' });
+    expect(parseBridgeCommand('/antigravity rode os testes')).toEqual({ bridge: 'antigravity', text: 'rode os testes' });
+    expect(parseBridgeCommand('/claude explique')).toEqual({ bridge: 'claude', text: 'explique' });
+    expect(parseBridgeCommand('/codex refatore')).toEqual({ bridge: 'codex', text: 'refatore' });
+    expect(parseBridgeCommand('/opencode status')).toEqual({ bridge: 'opencode', text: 'status' });
+    // Sem texto após o comando (apenas para alternar terminal)
+    expect(parseBridgeCommand('/agy')).toEqual({ bridge: 'antigravity', text: '' });
+    expect(parseBridgeCommand('/claude   ')).toEqual({ bridge: 'claude', text: '' });
+    // Texto normal
+    expect(parseBridgeCommand('olá mundo')).toEqual({ text: 'olá mundo' });
+    expect(parseBridgeCommand('/outra coisa')).toEqual({ text: '/outra coisa' });
   });
 });
