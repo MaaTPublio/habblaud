@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus } from '../../../shared/types';
 import { errMsg, log } from '../../log';
+import { normalizeCwd } from '../../model/rooms';
 
 const require = createRequire(import.meta.url);
 
@@ -37,11 +38,11 @@ export function resolveWorkspace(raw: unknown, fallback: string = process.cwd())
         } else if (uri.startsWith('file://')) {
           uri = uri.slice(7);
         }
-        return decodeURIComponent(uri);
+        return normalizeCwd(decodeURIComponent(uri));
       }
     }
   } catch {}
-  return fallback;
+  return normalizeCwd(fallback);
 }
 
 export interface DiscoveredSession {

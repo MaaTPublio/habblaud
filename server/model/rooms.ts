@@ -1,9 +1,32 @@
 // Salas do escritório: identidade (cwd normalizado), nome exibido e posição (slot) no prédio.
 
-/** cwd normalizado: sem barras repetidas nem barra final. */
+import { realpathSync } from 'node:fs';
+
+/** cwd normalizado: sem barras invertidas, sem barras repetidas nem barra final, letra de drive maiúscula no Windows. */
 export function normalizeCwd(cwd: string): string {
-  const p = cwd.trim().replace(/\/{2,}/g, '/');
-  return p.length > 1 ? p.replace(/\/+$/, '') : p;
+  let p = cwd.trim().replace(/\\/g, '/');
+  if (/^\/\/\?\/[A-Za-z]:/.test(p)) {
+    p = p.slice(4);
+  }
+  if (/^[a-zA-Z]:/.test(p)) {
+    p = p[0].toUpperCase() + p.slice(1);
+  }
+  p = p.replace(/\/{2,}/g, '/');
+  if (/^[A-Za-z]:\/$/.test(p)) return p;
+  const cleaned = p.length > 1 ? p.replace(/\/+$/, '') : p;
+
+  if (process.platform === 'win32' && /^[A-Z]:\//i.test(cleaned)) {
+    try {
+      const real = realpathSync.native(cleaned);
+      let r = real.replace(/\\/g, '/');
+      if (/^[a-zA-Z]:/.test(r)) r = r[0].toUpperCase() + r.slice(1);
+      return r.length > 1 ? r.replace(/\/+$/, '') : r;
+    } catch {
+      // Se não existir no disco (ex.: testes sintéticos), usa cleaned
+    }
+  }
+
+  return cleaned;
 }
 
 function segments(path: string): string[] {

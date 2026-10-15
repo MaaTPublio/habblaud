@@ -37,6 +37,11 @@ describe('salas', () => {
   it('normaliza o cwd', () => {
     expect(normalizeCwd('/a//b/')).toBe('/a/b');
     expect(normalizeCwd('/')).toBe('/');
+    expect(normalizeCwd('C:\\projetos\\loja\\')).toBe('C:/projetos/loja');
+    expect(normalizeCwd('c:/projetos/loja')).toBe('C:/projetos/loja');
+    expect(normalizeCwd('\\\\?\\C:\\projetos\\loja')).toBe('C:/projetos/loja');
+    expect(normalizeCwd('C:\\')).toBe('C:/');
+    expect(normalizeCwd('C:/')).toBe('C:/');
   });
 
   it('desambigua basenames repetidos com o diretório pai', () => {

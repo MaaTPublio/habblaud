@@ -10,6 +10,12 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Multi-agente: mesma sala no Windows e sincronização de atividades
+
+- **Salas unificadas no Windows:** caminhos com barras invertidas (`\`), barras normais (`/`), letras de drive minúsculas ou maiúsculas (`c:` vs `C:`) e caminhos canônicos caem na mesma sala. Agentes do Antigravity (`agy`) e Codex na mesma pasta agora compartilham a mesma sala do escritório.
+- **Sincronização de atividades (`.habblaud/room-activity.md`):** o servidor sincroniza em tempo real as tarefas, ferramentas e status de todos os agentes da sala num arquivo legível e estruturado (`.habblaud/room-activity.md` e `.habblaud/room-activity.json`) na raiz do projeto, permitindo que agentes de ferramentas diferentes (Agy, Codex, Claude) saibam o que os colegas estão fazendo e evitem edições simultâneas nos mesmos arquivos.
+- **Aviso de sala compartilhada:** notificação no feed e toast quando dois agentes dividem a mesma sala no escritório.
+
 ### Habblaud World (em desenvolvimento, desligado por padrão)
 
 A base do Habblaud World, a cidade online onde cada Habblaud vira um prédio. Sem `HABBLAUD_WORLD_URL` o recurso fica

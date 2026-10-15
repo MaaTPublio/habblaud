@@ -59,6 +59,7 @@ import { WorldClient } from './world/client';
 import { createWorldRoutes } from './world/http';
 import { WorldService } from './world/service';
 import { WorldSettingsStore } from './world/settings';
+import { RoomActivitySync } from './sync/room-activity';
 
 const config = loadConfig();
 const startedAt = Date.now();
@@ -149,6 +150,7 @@ if (antigravity) agents.add(antigravity);
 const codexLive: CodexLive | undefined = codex;
 late.office = office;
 late.agents = agents;
+const roomActivity = new RoomActivitySync({ office });
 // Página que pode responder pelo escritório: Host local na porta local; na remota, só com permissions liberado.
 const hub = new Hub(office, {
   canAnswer: (req) => (isRemoteRequest(req) ? !!config.remote?.allow.has('permissions') : isLoopbackHost(req.headers.host)),
@@ -544,6 +546,7 @@ function shutdown(signal: string): void {
   void closeVite?.();
   remoteListener?.close();
   server.close(() => process.exit(0));
+  roomActivity.stop();
   setTimeout(() => process.exit(0), 1_500).unref();
 }
 process.on('SIGINT', () => shutdown('SIGINT'));

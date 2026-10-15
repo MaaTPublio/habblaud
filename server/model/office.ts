@@ -361,6 +361,11 @@ export class Office {
     const acc = this.deps.accountName(p.account);
     this.notice('arrive', p.id, 'info', tr('👋 {0} chegou em {1}{2}', [info.name, this.roomName(roomId), acc ? ` (${acc})` : '']), roomId);
     this.markDirty();
+    const peers = [...this.agents.values()].filter((r) => r.info.roomId === roomId && r.info.id !== p.id && r.info.status !== 'offline');
+    if (peers.length > 0) {
+      const peerNames = peers.map((r) => r.info.name).join(', ');
+      this.notice('arrive', p.id, 'info', tr('🤝 {0} agora divide a sala com {1} em {2}', [info.name, peerNames, this.roomName(roomId)]), roomId);
+    }
   }
 
   /** Mesmo processo, sessão nova (/clear, /resume): o personagem continua, tarefas e números zeram. */
