@@ -8,3 +8,5 @@ scripts/assets/.cache/
 
 # Configurações locais do Claude Code e caches de geração
 .claude/
+.serena/
+

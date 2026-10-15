@@ -1,6 +1,6 @@
 // Gaveta de detalhes (direita): agente ou sala selecionados. Agente do Codex: selo "Codex", textos dele (onde
 // responder, o terminal, a aprovação no lugar do modo de permissão, sem custo) e a dica dos hooks do Codex.
-import type { Activity, AgentInfo, FeedItem, RoomInfo, ShellJob, TaskItem } from '../../../shared/types';
+import type { Activity, AgentInfo, FeedItem, Provider, RoomInfo, ShellJob, TaskItem } from '../../../shared/types';
 import { roomTheme } from '../art';
 import { createAvatarPlaceholder, updateAvatar } from './avatar';
 import { CharacterEditor } from './character-editor';
@@ -818,6 +818,8 @@ class RoomView {
   private tasksBar: HTMLElement;
   private tasks: KeyedList<{ task: TaskItem; owner: string; key: string }>;
   private feed: KeyedList<FeedItem>;
+  private providerSelect: HTMLSelectElement;
+  private providerKey = '';
   private feedSec: ReturnType<typeof section>;
   private newBtn: HTMLButtonElement;
   private newMsg: HTMLElement;
@@ -826,7 +828,8 @@ class RoomView {
     private ctx: UiContext,
     private pty: PtyControl,
   ) {
-    this.newBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Nova sessão'), title: tr('Abre um Claude Code novo nesta pasta, num terminal interativo'), on: { click: () => this.newSession() } });
+    this.newBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Contratar agente'), on: { click: () => this.newSession() } });
+    this.providerSelect = h('select', { class: 'ui-btn', attrs: { 'aria-label': tr('Agente') } });
     this.newMsg = h('p', { class: 'ui-actions__msg is-error', role: 'status', hidden: true });
     this.swatch = h('span', { class: 'ui-room-hero__swatch', attrs: { 'aria-hidden': 'true' } });
     this.name = h('h2', { class: 'ui-hero__name' });
@@ -887,7 +890,7 @@ class RoomView {
         h('div', { class: 'ui-hero__text' }, h('div', { class: 'ui-room-hero__title' }, this.name, this.renameBtn), h('span', { class: 'ui-copy-row' }, this.path, copyButton(() => this.last?.path ?? '', tr('Copiar caminho')))),
       ),
       this.gone,
-      h('div', { class: 'ui-status' }, accsEl, h('span', { class: 'ui-status__actions' }, this.newBtn, centerBtn)),
+      h('div', { class: 'ui-status' }, accsEl, h('span', { class: 'ui-status__actions' }, this.providerSelect, this.newBtn, centerBtn)),
       this.newMsg,
       this.agentsSec.el,
       this.tasksSec.el,
@@ -899,14 +902,15 @@ class RoomView {
     return this.id;
   }
 
-  /** Sessão nova na pasta da sala, na conta de quem estiver nela (ou na padrão). */
+  /** Sessão nova na pasta da sala com provedor disponível. */
   private newSession(): void {
     const r = this.last;
     if (!r) return;
-    // Só conta do Claude Code (nem Codex nem demo); sem nenhuma na sala, o servidor usa a padrão.
-    const account = (this.ctx.store.snapshot?.agents ?? []).find((a) => a.roomId === r.id && ptyControllable(a))?.account;
+    const provider = this.providerSelect.value as Provider;
+    const agents = (this.ctx.store.snapshot?.agents ?? []).filter((a) => a.roomId === r.id && (a.provider ?? 'claude') === provider);
+    const account = agents[0]?.account ?? this.ctx.store.snapshot?.accounts.find((a) => (a.provider ?? 'claude') === provider)?.id;
     setHidden(this.newMsg, true);
-    this.pty.newSession(r.path, account).catch((err: Error) => {
+    this.pty.newSession(r.path, account, provider).catch((err: Error) => {
       setText(this.newMsg, tr('Não deu: {0}', [err.message]));
       setHidden(this.newMsg, false);
     });
@@ -940,6 +944,18 @@ class RoomView {
 
     const snap = this.ctx.store.snapshot;
     const agents = (snap?.agents ?? []).filter((a) => a.roomId === r.id);
+    const providers: Provider[] = ['claude'];
+    if (snap?.accounts.some((a) => a.provider === 'antigravity')) providers.push('antigravity');
+    const providerKey = providers.join(',');
+    if (providerKey !== this.providerKey) {
+      const options = providers.map((provider) => h('option', { attrs: { value: provider }, text: provider === 'antigravity' ? tr('Antigravity CLI') : tr('Claude Code') }));
+      const selected = this.providerSelect.value as Provider;
+      const roomProvider = agents.find((a) => providers.includes(a.provider ?? 'claude'))?.provider ?? 'claude';
+      this.providerSelect.replaceChildren(...options);
+      this.providerSelect.value = providers.includes(selected) ? selected : roomProvider;
+      this.providerKey = providerKey;
+    }
+    setHidden(this.providerSelect, !this.pty.enabled || providers.length < 2);
     this.accs.sync(accountsOf(agents, snap?.accounts ?? []));
     const ordered = sortByUrgency(agents);
     setText(this.agentsSec.extra, agents.length ? String(agents.length) : '');

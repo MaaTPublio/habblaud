@@ -1,5 +1,5 @@
 // Contexto compartilhado entre os componentes da interface.
-import type { AccountInfo, AgentInfo } from '../../../shared/types';
+import type { AccountInfo, AgentInfo, Provider } from '../../../shared/types';
 import type { OfficeStore } from '../net/store';
 import type { Selection, WorldApi } from '../world/api';
 import type { UiPrefs } from './prefs';
@@ -27,7 +27,7 @@ export interface TerminalRouter {
   /** Terminal interativo ligado (abrir sessões novas, assumir, encerrar). */
   readonly interactiveEnabled: boolean;
   /** Sessão nova (Claude Code ou Antigravity) na pasta, aberta no terminal interativo. */
-  newSession(cwd: string, account?: string, provider?: string): Promise<void>;
+  newSession(cwd: string, account?: string, provider?: Provider): Promise<void>;
 }
 
 export type HelpSection = 'usage' | 'codex' | 'opencode';

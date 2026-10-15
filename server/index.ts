@@ -32,6 +32,7 @@ import { createPermissionRoutes } from './permissions/http';
 import { PermissionRegistry } from './permissions/registry';
 import { codexAccountOf } from './codex/http';
 import { createCodexQueueRunner, findCodexBin } from './messages/codex';
+import { createAntigravityPromptRunner, findAgyBin } from './messages/antigravity';
 import { createMessageRoutes } from './messages/http';
 import { MessageRegistry } from './messages/registry';
 import type { CodexLive } from './sources/codex/live';
@@ -218,6 +219,7 @@ late.permissions = permissions;
 // fora do Docker o próprio servidor roda o comando (HABBLAUD_CODEX_BIN ou `codex` do PATH); no Docker, o auxiliar do
 // host (npm run codex:bridge).
 const codexBin = config.messages && !config.inDocker ? findCodexBin(process.env) : undefined;
+const agyBin = config.messages && !config.inDocker ? findAgyBin(process.env) : undefined;
 // Terminal interativo e Novo agente: os dois rodam o Claude Code neste computador, então pedem a mesma liberação,
 // HABBLAUD_PTY=1 (aceita os mesmos valores do HABBLAUD_TERMINAL).
 const ptyFlag = process.env.HABBLAUD_PTY?.trim();
@@ -244,6 +246,7 @@ const messages = config.messages
         run: codexBin ? createCodexQueueRunner(codexBin) : undefined,
         homeOf: (account) => accounts.entriesOf('codex').find((e) => e.id === account)?.detected.configDir,
       },
+      antigravity: config.antigravity && agyBin ? { run: createAntigravityPromptRunner(agyBin) } : undefined,
       opencode: config.opencode,
     })
   : undefined;

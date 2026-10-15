@@ -29,7 +29,12 @@ import { describeMessage, MESSAGE_MAX } from '../../shared/messages';
 import type { Activity, AgentInfo, InboxMessage, OutboxMessage } from '../../shared/types';
 import { errMsg, log } from '../log';
 import type { CodexQueueResult, CodexQueueRunner } from './codex';
+import type { AntigravityPromptResult, AntigravityPromptRunner } from './antigravity';
 import { tr } from '../../shared/i18n';
+
+export interface AntigravityDeliveryOptions {
+  run?: AntigravityPromptRunner;
+}
 
 /** Sessão que perguntou pela caixa de entrada há até este tempo: recebe mensagens (canMessage). */
 export const PRESENCE_MS = 10_000;
@@ -80,6 +85,7 @@ export interface OfficeLike {
   list(): AgentInfo[];
   markDirty(): void;
   addActivity(id: string, activity: Activity, current: boolean): void;
+  roomPath?(roomId: string): string | undefined;
 }
 
 /** Entregador do Codex (`codex queue`). */
@@ -98,6 +104,8 @@ export interface MessageRegistryOptions {
   demoDeliver?: (agentId: string, text: string) => boolean;
   /** Mensagens aos agentes do Codex; ausente = eles não recebem. */
   codex?: CodexDeliveryOptions;
+  /** Mensagens aos agentes do Antigravity (executando agy diretamente). */
+  antigravity?: AntigravityDeliveryOptions;
   /** Mensagens aos agentes do OpenCode pelo plugin dele (HABBLAUD_OPENCODE ligado); ausente = eles não recebem. */
   opencode?: boolean;
   now?: () => number;
@@ -144,6 +152,8 @@ interface Entry {
   /** Mensagem a um agente do Codex: sai pelo entregador do Codex ('node' = o servidor rodou; 'bridge' = o auxiliar). */
   codex?: true;
   via?: 'node' | 'bridge';
+  /** Mensagem a um agente do Antigravity. */
+  antigravity?: true;
   /** Mensagem a um agente do OpenCode: só o plugin dele busca (opencodePoll) e confirma (opencodeAck). */
   opencode?: true;
   /** Falhou por falta de confirmação: uma confirmação atrasada ainda corrige a situação. */
@@ -175,6 +185,7 @@ function unavailableReason(a: AgentInfo, reachable: boolean): string | undefined
   if (a.kind !== 'main') return tr('subagentes não recebem mensagens: mande para o agente principal');
   if (!present(a)) return tr('o agente já saiu do escritório');
   if (!reachable) {
+    if (a.provider === 'antigravity') return tr('o executável agy não está disponível para executar comandos');
     if (a.provider === 'opencode') return ERR_OPENCODE_UNAVAILABLE;
     return a.provider === 'codex' ? ERR_CODEX_UNAVAILABLE : tr('a sessão não está com o plugin habblaud-mensagens conectado (npm run mod:install)');
   }
@@ -266,16 +277,23 @@ export class MessageRegistry {
     for (const id of this.seen.keys()) if (this.canMessage(id)) out.add(id);
     for (const id of this.ocSeen.keys()) if (this.canMessage(id)) out.add(id);
     if (this.codexAvailable()) for (const a of this.opts.office.list()) if (a.provider === 'codex' && a.kind === 'main' && present(a)) out.add(a.id);
+    if (this.antigravityAvailable()) for (const a of this.opts.office.list()) if (a.provider === 'antigravity' && a.kind === 'main' && present(a)) out.add(a.id);
     return out;
   }
 
   canMessage(agentId: string): boolean {
     const a = this.opts.office.get(agentId);
+    if (a?.provider === 'antigravity') return this.antigravityAvailable() && present(a) && a.kind === 'main';
     if (a?.provider === 'codex') return this.codexAvailable() && present(a) && a.kind === 'main';
     if (a?.provider === 'opencode') return this.opencodeRecent(agentId) && present(a) && a.kind === 'main';
     const at = this.seen.get(agentId);
     if (at === undefined || this.now() - at >= this.presenceMs) return false;
     return present(a) && a.kind === 'main';
+  }
+
+  /** Há como entregar ao Antigravity: o executor de prompts está configurado. */
+  antigravityAvailable(): boolean {
+    return !!this.opts.antigravity?.run;
   }
 
   /** Há como entregar ao Codex: o binário no modo Node ou o auxiliar do host visto há pouco. */
@@ -312,10 +330,12 @@ export class MessageRegistry {
     const id = `m-${now.toString(36)}-${++this.seq}-${randomBytes(9).toString('base64url')}`;
     const entry: Entry = { msg: { id, agentId, status: 'queued', createdAt: now, updatedAt: now }, text, activity: describeMessage(text), target: agent.sessionId };
     if (demo) entry.demo = true;
+    else if (real?.provider === 'antigravity') entry.antigravity = true;
     else if (real?.provider === 'codex') entry.codex = true;
     else if (real?.provider === 'opencode') entry.opencode = true;
     this.messages.set(id, entry);
     const out = { ...entry.msg };
+    if (entry.antigravity) this.pumpAntigravity();
     if (entry.codex) this.pumpCodex();
     return { message: out };
   }
@@ -517,6 +537,7 @@ export class MessageRegistry {
       // Sem o binário no modo Node, os agentes do Codex deixam de receber.
       if (!this.opts.codex?.run) this.opts.office.markDirty();
     }
+    this.pumpAntigravity();
     this.pumpCodex();
   }
 
@@ -575,6 +596,50 @@ export class MessageRegistry {
     if (r.ok) this.finish(e, 'delivered', now);
     else this.fail(e, now, truncate(r.error, ERROR_MAX) || ERR_CODEX_REFUSED);
     this.pumpCodex();
+  }
+
+  /** Conversa e pasta do projeto de uma mensagem ao Antigravity; sem elas, a mensagem falha. */
+  private antigravityTarget(e: Entry, now: number): { cwd: string; conversationId: string } | undefined {
+    const a = this.opts.office.get(e.msg.agentId);
+    if (!present(a)) return void this.fail(e, now, ERR_GONE);
+    if (a.sessionId !== e.target) return void this.fail(e, now, ERR_SESSION_CHANGED);
+    const cwd = (a.roomId ? this.opts.office.roomPath?.(a.roomId) : undefined) || process.cwd();
+    return { cwd, conversationId: a.sessionId };
+  }
+
+  /**
+   * Roda o executor de prompt do Antigravity para a próxima mensagem do agente
+   * (uma por vez por agente, na ordem; a seguinte sai quando a anterior termina).
+   */
+  private pumpAntigravity(): void {
+    const run = this.opts.antigravity?.run;
+    if (!run) return;
+    const busy = new Set<string>();
+    for (const e of this.messages.values()) if (e.antigravity && e.msg.status === 'sent') busy.add(e.msg.agentId);
+    const now = this.now();
+    for (const e of this.messages.values()) {
+      if (!e.antigravity || e.msg.status !== 'queued' || busy.has(e.msg.agentId)) continue;
+      busy.add(e.msg.agentId);
+      const target = this.antigravityTarget(e, now);
+      if (!target) continue;
+      this.setStatus(e, 'sent', now);
+      e.sentAt = now;
+      e.via = 'node';
+      run({ cwd: target.cwd, conversationId: target.conversationId, text: e.text }).then(
+        (r) => this.antigravityDone(e, r),
+        (err: unknown) => this.antigravityDone(e, { ok: false, error: errMsg(err) }),
+      );
+    }
+  }
+
+  /** Fim de um comando enviado ao Antigravity. */
+  private antigravityDone(e: Entry, r: AntigravityPromptResult): void {
+    if (this.messages.get(e.msg.id) !== e) return;
+    if (e.msg.status !== 'sent' && !(e.msg.status === 'failed' && e.late)) return;
+    const now = this.now();
+    if (r.ok) this.finish(e, 'delivered', now);
+    else this.fail(e, now, truncate(r.error, ERROR_MAX) || tr('falha ao enviar comando ao Antigravity'));
+    this.pumpAntigravity();
   }
 
   private setStatus(e: Entry, status: OutboxMessage['status'], now: number): void {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentInfo } from '../../../shared/types';
 import {
+  ANTIGRAVITY_HINT,
+  ANTIGRAVITY_TIMEOUT_ERROR,
   canSend,
   CODEX_BRIDGE_HINT,
   CODEX_TIMEOUT_ERROR,
@@ -121,6 +123,25 @@ describe('caixa de mensagem (peças puras)', () => {
     expect(composerTip()).toBe('Entra na sessão como se você tivesse digitado. Enter manda; Shift+Enter quebra a linha.');
     expect(timeoutError('codex')).toBe(CODEX_TIMEOUT_ERROR);
     expect(timeoutError()).toBe(TIMEOUT_ERROR);
+  });
+
+  it('Antigravity: com agy disponível, pronta; sem ele, a dica do agy; recurso desligado manda ao Antigravity', () => {
+    const agy = (over: Partial<AgentInfo> = {}) => agent({ provider: 'antigravity', ...over });
+    expect(composerMode(agy(), ON)).toEqual({ kind: 'ready' });
+    expect(composerMode(agy({ canMessage: undefined }), ON)).toEqual({ kind: 'hint', text: ANTIGRAVITY_HINT });
+    expect(ANTIGRAVITY_HINT).toBe('Para mandar comandos ao Antigravity: o executável agy precisa estar instalado no PATH (ou HABBLAUD_AGY_BIN)');
+    expect(composerMode(agy(), { ...ON, enabled: false })).toEqual({ kind: 'off', text: 'Para responder, use o terminal do Antigravity' });
+    expect(composerMode(agy({ kind: 'sub', parentId: 'acc:1' }), ON).kind).toBe('off');
+    expect(composerMode(agy({ status: 'offline' }), ON)).toEqual({ kind: 'off', text: 'Sessão encerrada' });
+  });
+
+  it('Antigravity: situação, dica e prazo falam do Antigravity', () => {
+    expect(sendStatusText({ phase: 'delivered', at: 0 }, 1_000, 'antigravity')).toBe('Comando executado com sucesso no Antigravity ✓');
+    expect(sendStatusText({ phase: 'delivered', at: 0 }, DELIVERED_SHOW_MS, 'antigravity')).toBe('');
+    expect(sendStatusText({ phase: 'queued', at: 0 }, 0, 'antigravity')).toBe('Na fila: executando comando no Antigravity…');
+    expect(sendStatusText({ phase: 'sent', at: 0 }, 0, 'antigravity')).toBe('Executando comando no Antigravity…');
+    expect(composerTip('antigravity')).toBe('Entra na sessão do Antigravity como um novo comando. Enter manda; Shift+Enter quebra a linha.');
+    expect(timeoutError('antigravity')).toBe(ANTIGRAVITY_TIMEOUT_ERROR);
   });
 
   it('consulta da entrega: rápida no começo, mais espaçada depois', () => {

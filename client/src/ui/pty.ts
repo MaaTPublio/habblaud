@@ -5,7 +5,7 @@
 // entre os agentes do mesmo projeto; as duas janelas se revezam no mesmo lugar.
 // As teclas não vazam para os atalhos do escritório (T, P, M, Esc...): Esc, por exemplo, interrompe o Claude.
 // Fechar a janela não encerra a sessão; "Encerrar" encerra.
-import type { AgentInfo, PtyInfo } from '../../../shared/types';
+import type { AgentInfo, Provider, PtyInfo } from '../../../shared/types';
 import type { UiComponent, UiContext } from './context';
 import { h, iconButton, setHidden, setText } from './dom';
 import { ICONS } from './icons';
@@ -32,7 +32,7 @@ export interface PtyControl {
   openAgent(agentId: string): void;
   close(): void;
   takeover(agentId: string): Promise<void>;
-  newSession(cwd: string, account?: string): Promise<void>;
+  newSession(cwd: string, account?: string, provider?: Provider): Promise<void>;
   stop(agentId: string): Promise<void>;
 }
 
@@ -144,7 +144,7 @@ export class PtyPanel implements UiComponent, PtyControl {
     if (p) this.show(p, true);
   }
 
-  async newSession(cwd: string, account?: string, provider?: string): Promise<void> {
+  async newSession(cwd: string, account?: string, provider?: Provider): Promise<void> {
     const p = await createPty(cwd, account, provider);
     if (p) this.show(p, true);
   }

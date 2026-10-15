@@ -2251,6 +2251,8 @@ export const ES: Readonly<Record<string, string>> = {
 
   // client/src/ui/drawer.ts e daystats.ts (textos do terminal interativo e do Meu dia)
   "Nova sessão": "Nueva sesión",
+  "Contratar agente": "Contratar agente",
+  "Claude Code": "Claude Code",
   "Abre um Claude Code novo nesta pasta, num terminal interativo": "Abre un Claude Code nuevo en esta carpeta, en una terminal interactiva",
   "em {0}": "en {0}",
 
