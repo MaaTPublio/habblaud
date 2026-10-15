@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import * as appearance from '../appearance';
 import { LOCALES as UI_LOCALES } from '../i18n';
 import schemaJson from './schema.json';
+import { compileValidator } from './schema-validator';
 import {
   ACCESSORIES,
   BOTTOM_STYLES,
@@ -14,118 +15,29 @@ import {
   HAIR_STYLES,
   INTRO_IDS,
   LOCALES,
+  NOTICE_IDS,
   PLAYER_NAME_LIMITS,
   REPORT_REASONS,
+  STAMP_IDS,
+  CITY_GOAL_IDS,
   TOP_STYLES,
   TRAIT_CLASHES,
   TRAIT_IDS,
+  UPLINK_ACK_ERRORS,
   UPLINK_LIMITS,
+  VISIBILITY_DEFAULTS,
+  WORLD_ERROR_CODES,
   WORLD_LOCALES,
   type AppearanceParts,
+  type DeleteConfirmRequest,
+  type MeBuilding,
+  type Visibility,
+  type WorldBuildingPublic,
+  type WorldExport,
   type WorldAgentStatus,
   type WorldTheme,
   type WorldUplink,
 } from './protocol';
-
-// ---------------------------------------------------------------------------------------------------------------
-// Validador mínimo de JSON Schema (só as palavras-chave que o schema.json usa; qualquer outra derruba o teste, para
-// nenhuma regra ser ignorada em silêncio).
-// ---------------------------------------------------------------------------------------------------------------
-
-type Schema = boolean | { [k: string]: unknown };
-interface SchemaError { keyword: string; path: string }
-
-const ANNOTATIONS = new Set(['$schema', '$id', 'title', 'description', '$defs']);
-const KEYWORDS = new Set([
-  '$ref', 'type', 'const', 'enum', 'properties', 'required', 'additionalProperties', 'items', 'minItems', 'maxItems',
-  'pattern', 'minLength', 'maxLength', 'minimum', 'maximum', 'if', 'then', 'else',
-]);
-
-function typeOk(type: string, v: unknown): boolean {
-  switch (type) {
-    case 'object':
-      return !!v && typeof v === 'object' && !Array.isArray(v);
-    case 'array':
-      return Array.isArray(v);
-    case 'string':
-      return typeof v === 'string';
-    case 'integer':
-      return Number.isInteger(v);
-    case 'number':
-      return typeof v === 'number' && Number.isFinite(v);
-    case 'boolean':
-      return typeof v === 'boolean';
-    case 'null':
-      return v === null;
-    default:
-      throw new Error(`tipo não suportado: ${type}`);
-  }
-}
-
-function compileValidator(root: { [k: string]: unknown }): (data: unknown) => SchemaError[] {
-  const resolve = (ref: string): Schema => {
-    const m = /^#\/\$defs\/([\w-]+)$/.exec(ref);
-    const defs = root.$defs as Record<string, Schema> | undefined;
-    if (!m || !defs || !(m[1] in defs)) throw new Error(`$ref não suportado: ${ref}`);
-    return defs[m[1]];
-  };
-  const check = (schema: Schema, v: unknown, path: string, out: SchemaError[]): void => {
-    if (schema === true) return;
-    if (schema === false) return void out.push({ keyword: 'false schema', path });
-    for (const k of Object.keys(schema)) {
-      if (!KEYWORDS.has(k) && !ANNOTATIONS.has(k)) throw new Error(`palavra-chave não suportada: ${k} (${path || '/'})`);
-    }
-    const s = schema as Record<string, unknown>;
-    const fail = (keyword: string, at = path): void => void out.push({ keyword, path: at });
-    if (s.$ref !== undefined) check(resolve(s.$ref as string), v, path, out);
-    if (s.type !== undefined && !typeOk(s.type as string, v)) return fail('type');
-    if ('const' in s && v !== s.const) fail('const');
-    if (s.enum !== undefined && !(s.enum as unknown[]).includes(v)) fail('enum');
-    if (typeof v === 'string') {
-      const len = [...v].length;
-      if (s.minLength !== undefined && len < (s.minLength as number)) fail('minLength');
-      if (s.maxLength !== undefined && len > (s.maxLength as number)) fail('maxLength');
-      if (s.pattern !== undefined && !new RegExp(s.pattern as string, 'u').test(v)) fail('pattern');
-    }
-    if (typeof v === 'number') {
-      if (s.minimum !== undefined && v < (s.minimum as number)) fail('minimum');
-      if (s.maximum !== undefined && v > (s.maximum as number)) fail('maximum');
-    }
-    if (Array.isArray(v)) {
-      if (s.minItems !== undefined && v.length < (s.minItems as number)) fail('minItems');
-      if (s.maxItems !== undefined && v.length > (s.maxItems as number)) fail('maxItems');
-      if (s.items !== undefined) v.forEach((item, i) => check(s.items as Schema, item, `${path}/${i}`, out));
-    }
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const obj = v as Record<string, unknown>;
-      const props = (s.properties ?? {}) as Record<string, Schema>;
-      for (const r of (s.required ?? []) as string[]) if (!(r in obj)) fail('required');
-      for (const [k, val] of Object.entries(obj)) {
-        if (k in props) check(props[k], val, `${path}/${k}`, out);
-        else if (s.additionalProperties === false) fail('additionalProperties');
-        else if (s.additionalProperties !== undefined) check(s.additionalProperties as Schema, val, `${path}/${k}`, out);
-      }
-    }
-    if (s.if !== undefined) {
-      const branch = validates(s.if as Schema, v) ? s.then : s.else;
-      if (branch !== undefined) {
-        const before = out.length;
-        check(branch as Schema, v, path, out);
-        if (out.length > before) fail('if');
-      }
-    }
-  };
-  const validates = (schema: Schema, v: unknown): boolean => {
-    const out: SchemaError[] = [];
-    check(schema, v, '', out);
-    return out.length === 0;
-  };
-  return (data) => {
-    const out: SchemaError[] = [];
-    check(root, data, '', out);
-    return out;
-  };
-}
 
 const schema = schemaJson as unknown as { [k: string]: unknown } & {
   properties: Record<string, { maxItems?: number }>;
@@ -242,7 +154,6 @@ describe('schema.json do WorldUplink (validador mínimo)', () => {
       (u) => { u.floors[0]!.agents[0]!.name = 'Projeto /Users/x'; },
       (u) => { u.tokens = { day: -1, week: 0 }; },
       (u) => { u.tokens = { day: 1.5, week: 0 }; },
-      (u) => { delete u.floors[0]!.agents[1]!.parentId; }, // subagente sem pai
       (u) => { u.floors[0]!.agents[0]!.parentId = 'a_71c0b5a9'; }, // principal com pai
       (u) => { u.floors = Array.from({ length: 65 }, (_, i) => ({ id: `f_${i.toString(16).padStart(10, '0')}`, agents: [] })); },
     ];
@@ -251,6 +162,14 @@ describe('schema.json do WorldUplink (validador mínimo)', () => {
       mudar(u);
       expect(valid(u), `caso ${i}`).toBe(false);
     }
+  });
+
+  it('subagente sem o pai no pacote vai sem parentId (o pai já saiu); principal nunca leva parentId', () => {
+    const u = clone(EXEMPLO_COMPLETO);
+    delete u.floors[0]!.agents[1]!.parentId;
+    expect(validate(u)).toEqual([]);
+    u.floors[0]!.agents[0]!.parentId = 'a_71c0b5a9';
+    expect(valid(u)).toBe(false);
   });
 
   it('o validador mínimo não ignora palavra-chave nenhuma', () => {
@@ -299,5 +218,44 @@ describe('listas do protocolo', () => {
     expect([...WORLD_LOCALES]).toEqual(UI_LOCALES.map((l) => l.id));
     expect(GOODBYE_REASONS).toEqual(expect.arrayContaining(['waiting', 'unauthorized', 'banned', 'suspended', 'update', 'no_player']));
     expect(PLAYER_NAME_LIMITS).toEqual({ min: 3, max: 20 });
+  });
+
+  it('Fases 3 a 5: os ids dos avisos (o `text` do notice) e o `left` do ack, só acrescentados', () => {
+    expect([...NOTICE_IDS]).toEqual([
+      'ignored', 'invalid', 'rate_limited', 'view_required', 'not_found', 'street_left', 'chunk_full', 'afk', 'server_restart', 'left',
+      // Fase 4 (a porta de um prédio): só no fim.
+      'too_far', 'closed', 'blocked', 'full',
+      // Fase 5 (social leve): só no fim.
+      'daily_limit', 'already_done', 'reported', 'blocked_ok', 'stamped',
+    ]);
+    for (const id of NOTICE_IDS) expect(id).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    // Os códigos da Fase 2 continuam na mesma ordem; `left` (Fase 3) e `implausible` (Fase 6) entram no fim.
+    expect([...UPLINK_ACK_ERRORS]).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left', 'implausible']);
+  });
+
+  it('Fase 5: 8 carimbos, 3 metas da cidade, os 6 motivos de denúncia e "bater na porta" desligado por padrão', () => {
+    const unique = (l: readonly string[]) => new Set(l).size === l.length;
+    expect([...STAMP_IDS]).toEqual(['visited', 'nice_building', 'keep_going', 'coffee', 'wave', 'star', 'heart', 'rocket']);
+    expect([...CITY_GOAL_IDS]).toEqual(['agent_hours_10k', 'agent_hours_50k', 'agent_hours_100k']);
+    expect([...REPORT_REASONS]).toEqual(['offensive_name', 'impersonation', 'harassment', 'greeting_spam', 'fake_building', 'other']);
+    for (const l of [STAMP_IDS, CITY_GOAL_IDS]) expect(unique(l)).toBe(true);
+    for (const id of [...STAMP_IDS, ...CITY_GOAL_IDS]) expect(id).toMatch(/^[a-z0-9]+(_[a-z0-9]+)*$/);
+    expect(VISIBILITY_DEFAULTS.knocks).toBe(false);
+  });
+
+  it('Fase 6: `deleted` no goodbye, `maintenance` nos erros, `implausible` no ack, o aviso de inatividade e o selo "não verificado", só acrescentados', () => {
+    expect([...GOODBYE_REASONS]).toEqual(['deploy', 'other-device', 'banned', 'suspended', 'waiting', 'update', 'unauthorized', 'no_player', 'deleted']);
+    expect(WORLD_ERROR_CODES).toContain('maintenance');
+    expect(UPLINK_ACK_ERRORS.at(-1)).toBe('implausible');
+    // Opcionais: um corpo sem eles continua valendo, e o padrão da visibilidade não muda.
+    const v: Visibility = { ...VISIBILITY_DEFAULTS };
+    expect('notifyInactivity' in v).toBe(false);
+    const b: Pick<WorldBuildingPublic, 'unverified'> & Pick<MeBuilding, 'unverified'> = {};
+    expect(b.unverified).toBeUndefined();
+    // O pedido de exclusão e o arquivo "Baixar meus dados" (WorldExport) também são do protocolo.
+    const del: DeleteConfirmRequest = { code: '123456' };
+    expect(del.code).toHaveLength(6);
+    const exp: Pick<WorldExport, 'format' | 'version'> = { format: 'habblaud-world-export', version: 1 };
+    expect(exp.version).toBe(1);
   });
 });

@@ -316,7 +316,7 @@ export class Overlay {
     items.length = 0;
     const heads = this.renderer.heads;
     const showAll = opts.showNames && zoom >= 0.99;
-    for (const ch of this.sim.chars.values()) {
+    for (const ch of this.sim.people()) {
       const head = heads.get(ch.id);
       if (!head || !head.visible) continue;
       const hx = this.sx(head.x);
@@ -324,7 +324,9 @@ export class Overlay {
       if (hx < -120 || hx > vw + 120 || hy < -60 || hy > vh + 80) continue;
       const selected = sel.agent === ch.id;
       const hovered = sel.hover === ch.id;
-      const labeled = selected || hovered || ch.mode === 'wait' || showAll;
+      // o visitante (cena Visita) sempre com o nome e o crachá
+      const visitor = ch === this.sim.visitor;
+      const labeled = selected || hovered || ch.mode === 'wait' || showAll || visitor;
       const above = labeled && this.labelAbove(ch);
       const b = this.bubbleFor(ch, head, now, opts, selected, hovered);
       if (b) {
@@ -332,7 +334,7 @@ export class Overlay {
         items.push(b);
       }
       if (labeled) {
-        const prio = selected ? 100 : hovered ? 95 : ch.mode === 'wait' ? 90 : ch.info.kind === 'main' ? 50 : 40;
+        const prio = selected ? 100 : hovered ? 95 : visitor ? 92 : ch.mode === 'wait' ? 90 : ch.info.kind === 'main' ? 50 : 40;
         let l = this.labelPool[this.nl];
         if (!l) this.labelPool[this.nl] = l = { type: 'label', ch, head, prio, above, compact: false, x: 0, y: 0, w: 0, h: 0 };
         else {
@@ -659,7 +661,7 @@ export class Overlay {
 
   private bubbleFor(ch: Character, head: HeadInfo, now: number, opts: WorldOptions, selected: boolean, hovered: boolean): Bubble | null {
     if (opts.bubbles === 'none') return null;
-    if (ch.mode === 'wait') return this.takeBubble(ch, head, '✋', waitBubbleText(ch.info.waitingFor), 'alert', 100, 1, now);
+    if (ch.mode === 'wait') return this.takeBubble(ch, head, '✋', this.sim.visit ? tr('Esperando o dono') : waitBubbleText(ch.info.waitingFor), 'alert', 100, 1, now);
     if (ch.bubbleText && now < ch.bubbleUntil) {
       const a = Math.min(1, (now - ch.bubbleAt) / 150, (ch.bubbleUntil - now) / 400);
       return this.takeBubble(ch, head, ch.bubbleIcon, ch.bubbleText, 'deliver', 90, a, ch.bubbleAt);
@@ -705,6 +707,8 @@ export class Overlay {
 
   /** Texto do balão de shell, refeito só quando o tempo exibido muda (não a cada frame). */
   private shellText(ch: Character, now: number): string {
+    // visita: só o rótulo, sem o cronômetro (nenhum tempo veio do mundo)
+    if (this.sim.visit) return ch.shellLabel;
     const age = now - ch.shellSince;
     const key = shellAgeKey(age);
     if (key !== ch.shellTextKey || !ch.shellText) {
@@ -912,7 +916,8 @@ export class Overlay {
     const acc = this.sim.accounts.get(ch.info.account);
     const nameW = this.measure(LABEL_FONT, ch.info.name);
     const chipW = acc ? 13 : 0;
-    const badgeW = ch.info.kind === 'sub' && !l.compact ? this.measure(BADGE_FONT, 'SUB') + 7 : 0;
+    const visitor = ch === this.sim.visitor;
+    const badgeW = visitor ? this.measure(BADGE_FONT, visitorBadge()) + 7 : ch.info.kind === 'sub' && !l.compact ? this.measure(BADGE_FONT, 'SUB') + 7 : 0;
     const codexW = ch.info.provider === 'codex' && !l.compact ? this.measure(BADGE_FONT, CODEX_BADGE) + 7 : 0;
     return { nameW, chipW, badgeW, codexW };
   }
@@ -991,7 +996,7 @@ export class Overlay {
       ctx.fill();
       ctx.font = BADGE_FONT;
       ctx.fillStyle = '#2a2000';
-      ctx.fillText('SUB', cx + 3.5, y + h / 2 + 0.5);
+      ctx.fillText(ch === this.sim.visitor ? visitorBadge() : 'SUB', cx + 3.5, y + h / 2 + 0.5);
       cx += badgeW + 3;
     } else if (sub) {
       // selo compacto: pontinho na cor do crachá
@@ -1016,4 +1021,9 @@ export class Overlay {
 export function sayIcon(text: string): string {
   const m = /\p{Extended_Pictographic}(?:\uFE0F)?/u.exec(text);
   return m ? m[0] : '💬';
+}
+
+/** Selo da etiqueta do visitante (cena Visita), no lugar do "SUB". */
+export function visitorBadge(): string {
+  return tr('visitante').toLocaleUpperCase();
 }

@@ -6,7 +6,7 @@ import http from 'node:http';
 import { join } from 'node:path';
 import { codexDirsRefused, isDefaultDir } from './accounts/detect';
 import { AccountsService } from './accounts/service';
-import { isTruthy, loadConfig, messagesOffReason, terminalOffReason } from './config';
+import { isTruthy, loadConfig, messagesOffReason, terminalOffReason, worldSocketUrl } from './config';
 import { createApiHandler, sendJson } from './http/app';
 import { createRequestGuard, isLoopbackHost } from './http/guard';
 import { createRemoteGate, isRemoteRequest, loadSecret, RemoteSessions, startRemoteListener, type RemoteListener } from './http/remote';
@@ -43,9 +43,10 @@ import { CodexSource } from './sources/codex/source';
 import { AntigravitySource } from './sources/antigravity/source';
 import { AntigravityHistory } from './sources/antigravity/history';
 import { createOpencodeSource } from './sources/opencode/boot';
-import { createBuildReader } from './build';
+import { createBuildReader, readBuildInfo } from './build';
 import { UpdateChecker } from './updates/checker';
-import { tr } from '../shared/i18n';
+import { getLocale, tr } from '../shared/i18n';
+import type { WorldLocale } from '../shared/world/protocol';
 import { createCliRunner, createOpener, SpawnService } from './spawn/spawn';
 import { runnableClaudeBin } from './claude-bin';
 import { AttachmentStore } from './spawn/attachments';
@@ -60,6 +61,10 @@ import { createWorldRoutes } from './world/http';
 import { WorldService } from './world/service';
 import { WorldSettingsStore } from './world/settings';
 import { RoomActivitySync } from './sync/room-activity';
+import { OwnerSocial } from './world/social';
+import { BuildingTokens } from './world/tokens';
+import { BuildingUplink } from './world/uplink';
+import { WorldViewer } from './world/viewer';
 
 try {
   process.loadEnvFile?.();
@@ -103,6 +108,8 @@ updates.load();
 // sai do computador); HABBLAUD_WORLD=0 esconde tudo (rotas 404 e nada na interface).
 const worldStore = new WorldSettingsStore(join(config.dataDir, 'world.json'));
 if (config.world.enabled && config.world.url) worldStore.load();
+// O social leve do dono (world/social.ts): likes do dia, "enquanto você estava fora", batidas na porta e bloqueados.
+const worldSocial = config.world.enabled ? new OwnerSocial({ session: () => worldStore.get()?.deviceId, onChange: () => late.office?.markDirty() }) : undefined;
 const world = config.world.enabled
   ? new WorldService({
       config: config.world,
@@ -110,6 +117,7 @@ const world = config.world.enabled
       store: worldStore,
       client: config.world.url ? new WorldClient({ baseUrl: config.world.url, version: config.version }) : undefined,
       onChange: () => late.office?.markDirty(),
+      social: worldSocial,
     })
   : undefined;
 const accounts = new AccountsService({
@@ -164,6 +172,42 @@ const hub = new Hub(office, {
 // "Meu dia": amostra o escritório a cada segundo e persiste em <dataDir>/stats/ (ver history/daystats.ts).
 const stats = new DayStatsService({ dir: join(config.dataDir, 'stats'), snapshot: () => hub.current() });
 stats.load();
+// O prédio no Habblaud World (world/uplink.ts): só com HABBLAUD_WORLD_URL. Conecta sozinho com a conta aprovada, o
+// personagem criado, a trava do terminal e sem pausa; o pacote sai só da projeção (shared/world/projection.ts).
+const worldTokens = new BuildingTokens({ stats });
+const worldUplink =
+  world && config.world.url
+    ? new BuildingUplink({
+        url: worldSocketUrl(config.world.url),
+        version: config.version,
+        build: () => {
+          const b = readBuildInfo(config.rootDir);
+          return { commit: b.commit, dirty: b.dirty };
+        },
+        locale: () => getLocale() as WorldLocale,
+        store: worldStore,
+        canAct: () => config.terminal,
+        agents: () => office.list(),
+        subscribe: (cb) => office.onChange(cb),
+        booting: () => office.isBooting(),
+        tokens: () => worldTokens.read(),
+        lastFile: join(config.dataDir, 'world-last-uplink.json'),
+        onGoodbye: (reason) => world.goodbye(reason),
+        onLeft: () => world.leftElsewhere(),
+        onChange: () => office.markDirty(),
+      })
+    : undefined;
+if (world && worldUplink) world.attachUplink(worldUplink);
+// A cena Mundo (world/viewer.ts): a cidade pela mesma conexão do prédio, só com a cena aberta no navegador.
+const worldViewer = worldUplink ? new WorldViewer() : undefined;
+if (worldUplink && worldViewer) {
+  worldViewer.attach(worldUplink);
+  worldUplink.attachCity(worldViewer);
+}
+if (worldUplink && worldSocial) {
+  worldSocial.attach(worldUplink);
+  worldUplink.attachOwner(worldSocial);
+}
 // Terminal: só existe com bind local (ver terminalOffReason em config.ts).
 // Cada agente com o parser da ferramenta dele (o do Claude Code por padrão).
 const terminals = config.terminal
@@ -320,6 +364,7 @@ messages?.start();
 assets.start();
 stats.start();
 updates.start();
+worldUplink?.start();
 const ticker = setInterval(() => {
   try {
     office.tick();
@@ -371,7 +416,7 @@ const api = createApiHandler({
   stats,
   updates,
   remote: config.remote ? { is: isRemoteRequest, allows: (f) => config.remote!.allow.has(f) } : undefined,
-  world: world ? createWorldRoutes(world) : undefined,
+  world: world ? createWorldRoutes(world, worldViewer, worldSocial) : undefined,
 });
 
 const server = http.createServer();
@@ -553,6 +598,8 @@ function shutdown(signal: string): void {
   ptys?.stopAll();
   assets.stop();
   updates.stop();
+  worldViewer?.stop();
+  worldUplink?.stop();
   world?.stop();
   roomActivity.stop();
   names.flush();

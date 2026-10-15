@@ -2,14 +2,19 @@ import { describe, expect, it } from 'vitest';
 import type { OfficeSnapshot } from '../../../shared/types';
 import { fullParts, draftAppearance } from '../ui/world/world-model';
 import {
+  buildingFromMeta,
   FAKE_CODE,
   FAKE_EMAIL,
   FAKE_PASSWORD,
+  FAKE_UPLINK,
   FakeWorldApi,
   HttpWorldApi,
   fakeWorldStateFrom,
+  parseBuilding,
+  parseLastUplink,
   parseWorldStatus,
   readWorldMeta,
+  uplinkBytes,
   worldErrorCode,
   worldSource,
   type WorldCharacterInput,
@@ -48,7 +53,7 @@ describe('HttpWorldApi', () => {
     await api.forgotPassword({ email: 'a@b.co' });
     await api.resetPassword({ email: 'a@b.co', code: '123456', password: 'y'.repeat(12) });
     await api.saveCharacter(CHARACTER);
-    await api.saveVisibility({ mode: 'discreet', closed: true, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false });
+    await api.saveVisibility({ mode: 'discreet', closed: true, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false, knocks: false });
     await api.revokeDevice('d/1');
     expect(calls.map((c) => `${c.init?.method} ${c.url}`)).toEqual([
       'POST /api/world/register',
@@ -125,9 +130,17 @@ describe('meta.world e status', () => {
     expect(readWorldMeta(snap({ enabled: true, state: 'zzz' }))).toEqual({ enabled: true, configured: false, state: 'off' });
   });
 
+  it('readWorldMeta: a cena Mundo (Fase 3) só com `available` booleano', () => {
+    const base = { enabled: true, configured: true, state: 'approved' };
+    expect(readWorldMeta(snap({ ...base, scene: { available: true } }))?.scene).toEqual({ available: true });
+    expect(readWorldMeta(snap({ ...base, scene: { available: false, extra: 1 } }))?.scene).toEqual({ available: false });
+    expect(readWorldMeta(snap({ ...base, scene: { available: 'sim' } }))).not.toHaveProperty('scene');
+    expect(readWorldMeta(snap({ ...base, scene: [] }))).not.toHaveProperty('scene');
+  });
+
   it('parseWorldStatus completa a visibilidade do personagem com os padrões', () => {
     const s = parseWorldStatus({ state: 'approved', configured: true, player: { name: 'Pixel', look: 'm', parts: {}, traits: ['games', 'cafeina'], intro: 'coffee', visibility: { mode: 'discreet' } } });
-    expect(s?.player?.visibility).toEqual({ mode: 'discreet', closed: false, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false });
+    expect(s?.player?.visibility).toEqual({ mode: 'discreet', closed: false, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false, knocks: false });
   });
 
   it('parseWorldStatus: mustRename só quando é true', () => {
@@ -195,7 +208,7 @@ describe('FakeWorldApi', () => {
 
   it('visibilidade só com personagem; esconder o país tira o país do perfil', async () => {
     const api = fake({ state: 'approved' });
-    const vis = { mode: 'live', closed: false, hideCountry: true, tokensVisible: false, leaderboard: false, compactions: false } as const;
+    const vis = { mode: 'live', closed: false, hideCountry: true, tokensVisible: false, leaderboard: false, compactions: false, knocks: false } as const;
     expect((await api.saveVisibility(vis)).ok).toBe(true);
     const st = await api.status();
     expect(st.ok && st.data.player?.visibility).toEqual(vis);
@@ -280,11 +293,19 @@ describe('de onde vêm os dados', () => {
     expect(src.meta()).toBeUndefined();
   });
 
-  it('modo demonstração com &world: o falso responde', () => {
+  it('modo demonstração com &world: o falso responde (aprovado: com o prédio no mundo)', () => {
     const src = worldSource({ mock: true, liveSnapshot: null }, '?mock=1&world=approved');
     expect(src.fake).toBe(true);
     expect(src.client).toBeInstanceOf(FakeWorldApi);
-    expect(src.meta()).toEqual({ enabled: true, configured: true, state: 'approved' });
+    expect(src.meta()).toEqual({
+      enabled: true,
+      configured: true,
+      state: 'approved',
+      // Fase 5: likes do dia (3 e mais um por minuto) e o resumo não visto do modo demonstração
+      building: { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: expect.any(Number), visitors: 0, likesToday: 3, awaySummary: true },
+      scene: { available: true },
+    });
+    expect(worldSource({ mock: true, liveSnapshot: null }, '?mock=1&world=waiting').meta()).toEqual({ enabled: true, configured: true, state: 'waiting' });
   });
 
   it('ao vivo: rotas locais e o meta.world do snapshot ao vivo', () => {
@@ -292,5 +313,293 @@ describe('de onde vêm os dados', () => {
     const src = worldSource(store, '?world=waiting');
     expect(src.client).toBeInstanceOf(HttpWorldApi);
     expect(src.meta()).toEqual({ enabled: true, configured: true, state: 'logged_out' });
+  });
+});
+
+// ------------------------------------------------------------------ Fase 2: prédio no mundo
+
+describe('prédio: rotas locais da Fase 2', () => {
+  it('última remessa, pausar, retomar, sair do mundo e tema vão para as rotas do contrato', async () => {
+    const { calls, api } = recorder(200, {});
+    await api.lastUplink();
+    await api.pause();
+    await api.resume();
+    await api.leave();
+    await api.join();
+    await api.setTheme('christmas');
+    expect(calls.map((c) => `${c.init?.method} ${c.url} ${c.init?.body ?? ''}`.trim())).toEqual([
+      'GET /api/world/last-uplink',
+      'POST /api/world/pause {}',
+      'POST /api/world/resume {}',
+      'POST /api/world/leave {}',
+      'POST /api/world/join {}',
+      'PUT /api/world/theme {"theme":"christmas"}',
+    ]);
+  });
+
+  it('última remessa: {} é "nada saiu ainda"; o pacote vem como foi guardado; fora do formato é erro', async () => {
+    expect(await recorder(200, {}).api.lastUplink()).toEqual({ ok: true, data: null });
+    const body = { at: 1_760_000_000_000, bytes: 1174, uplink: FAKE_UPLINK, ack: { ok: true, at: 1_760_000_000_050 } };
+    expect(await recorder(200, body).api.lastUplink()).toEqual({ ok: true, data: body });
+    expect(await recorder(200, { at: 'ontem', uplink: {} }).api.lastUplink()).toMatchObject({ ok: false, code: 'unknown' });
+    expect(await recorder(401, { error: { code: 'not_logged_in' } }).api.lastUplink()).toMatchObject({ ok: false, code: 'not_logged_in' });
+  });
+
+  it('a resposta recusada sem código (ou com um que esta versão não conhece) vira "internal"; números tortos viram 0', () => {
+    expect(parseLastUplink({ at: 5, bytes: 10, uplink: { v: 1 }, ack: { ok: false, at: 6 } })?.ack).toEqual({ ok: false, error: 'internal', at: 6 });
+    expect(parseLastUplink({ at: 5, bytes: 10, uplink: { v: 1 }, ack: { ok: false, error: 'novo', at: 6 } })?.ack).toEqual({ ok: false, error: 'internal', at: 6 });
+    // Aceita: os bytes que o mundo contou; sem horário, a resposta não vale.
+    expect(parseLastUplink({ at: 5, bytes: 10, uplink: { v: 1 }, ack: { ok: true, at: 6, bytes: 10 } })?.ack).toEqual({ ok: true, at: 6, bytes: 10 });
+    expect(parseLastUplink({ at: 5, bytes: 10, uplink: { v: 1 }, ack: { ok: true } })?.ack).toBeUndefined();
+    expect(parseBuilding({ connected: 'sim', paused: true, floors: -3, agents: 2.7, lastUplinkAt: 'agora', lastAck: { ok: false, error: 'rate' } })).toEqual({
+      connected: false,
+      paused: true,
+      floors: 0,
+      agents: 2,
+      lastAck: { ok: false, error: 'rate' },
+    });
+    expect(parseBuilding('prédio')).toBeUndefined();
+  });
+
+  it('pausar e retomar devolvem o WorldStatus: vale o building.paused dele; sem o campo, o que foi pedido', async () => {
+    expect(await recorder(200, { state: 'approved', building: { paused: true } }).api.pause()).toEqual({ ok: true, data: { paused: true } });
+    expect(await recorder(200, { state: 'approved', building: { paused: true } }).api.resume()).toEqual({ ok: true, data: { paused: true } });
+    expect(await recorder(200, '').api.resume()).toEqual({ ok: true, data: { paused: false } });
+    expect(await recorder(409, { error: { code: 'no_player' } }).api.pause()).toMatchObject({ ok: false, code: 'no_player' });
+    expect(await recorder(503, { error: { code: 'unavailable' } }).api.leave()).toMatchObject({ ok: false, code: 'unavailable', status: 503 });
+  });
+
+  it('status: o motivo da parada (só os conhecidos), fora do mundo e o tema guardado', () => {
+    const base = { connected: false, paused: true, floors: 1, agents: 1 };
+    expect(parseWorldStatus({ state: 'approved', building: { ...base, stopped: 'update', left: true }, theme: 'christmas' })).toMatchObject({
+      building: { ...base, stopped: 'update', left: true },
+      theme: 'christmas',
+    });
+    const odd = parseWorldStatus({ state: 'approved', building: { ...base, stopped: 'deploy', left: 'sim' }, theme: 'pascoa' });
+    expect(odd?.building).toEqual(base);
+    expect(odd?.theme).toBeUndefined();
+    // No snapshot, a parada é só sim/não (o motivo não vai ao celular).
+    expect(readWorldMeta(snap({ enabled: true, configured: true, state: 'approved', building: { ...base, stopped: true } }))?.building).toEqual({ ...base, stopped: true });
+    expect(readWorldMeta(snap({ enabled: true, configured: true, state: 'approved', building: { ...base, stopped: 'update' } }))?.building).toEqual(base);
+    expect(buildingFromMeta({ ...base, stopped: true, left: true })).toEqual({ ...base, left: true });
+  });
+
+  it('meta.world e o status trazem o prédio, conferido', () => {
+    const building = { connected: true, paused: false, floors: 3, agents: 5, lastUplinkAt: 1_760_000_000_000 };
+    expect(readWorldMeta(snap({ enabled: true, configured: true, state: 'approved', building }))).toEqual({ enabled: true, configured: true, state: 'approved', building });
+    expect(readWorldMeta(snap({ enabled: true, configured: true, state: 'approved', building: 7 }))).toEqual({ enabled: true, configured: true, state: 'approved' });
+    const st = parseWorldStatus({ state: 'approved', configured: true, building: { ...building, lastAck: { ok: false, error: 'limits' } } });
+    expect(st?.building).toEqual({ ...building, lastAck: { ok: false, error: 'limits' } });
+  });
+});
+
+describe('FakeWorldApi: prédio', () => {
+  const OCT = Date.UTC(2026, 9, 15, 12);
+  const JULY = Date.UTC(2026, 6, 1, 12);
+  const clock = (start: number) => {
+    let t = start;
+    return { now: () => t, tick: (ms: number) => (t += ms) };
+  };
+
+  it('visitantes de mentira (Fase 4): ninguém nos primeiros segundos, depois 1 e 2; setVisitors fixa; pausado, nada', async () => {
+    const c = clock(OCT);
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: c.now });
+    expect(api.meta().building?.visitors).toBe(0);
+    c.tick(9_000);
+    expect(api.meta().building?.visitors).toBe(1);
+    c.tick(15_000);
+    expect(api.meta().building?.visitors).toBe(2);
+    api.setVisitors(5);
+    expect(api.meta().building?.visitors).toBe(5);
+    expect((await api.status()).ok && (await api.status() as { data: { building?: { visitors?: number } } }).data.building?.visitors).toBe(5);
+    await api.pause();
+    expect(api.meta().building).not.toHaveProperty('visitors');
+  });
+
+  it('o exemplo da 3.3: ids aleatórios no formato do protocolo, pais presentes, peças completas', () => {
+    const agents = FAKE_UPLINK.floors.flatMap((f) => f.agents);
+    for (const f of FAKE_UPLINK.floors) expect(f.id).toMatch(/^f_[0-9a-f]{10}$/);
+    for (const a of agents) {
+      expect(a.id).toMatch(/^a_[0-9a-f]{8}$/);
+      expect(Object.keys(a.parts)).toHaveLength(12);
+      if (a.kind === 'sub') expect(agents.map((x) => x.id)).toContain(a.parentId);
+    }
+    expect(uplinkBytes(FAKE_UPLINK)).toBe(new TextEncoder().encode(JSON.stringify(FAKE_UPLINK)).length);
+  });
+
+  it('aprovado: prédio aceso, a remessa de exemplo com o tema do dia e a resposta aceita', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
+    const st = await api.status();
+    expect(st.ok && st.data.building).toMatchObject({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT, lastAck: { ok: true }, visitors: 0 });
+    const last = await api.lastUplink();
+    const bytes = uplinkBytes({ ...FAKE_UPLINK, theme: 'halloween' });
+    expect(last.ok && last.data).toEqual({ at: OCT, bytes, uplink: { ...FAKE_UPLINK, theme: 'halloween' }, ack: { ok: true, at: OCT, bytes } });
+    // Fora de outubro, o automático manda o visual original.
+    const july = await new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => JULY }).lastUplink();
+    expect(july.ok && july.data?.uplink.theme).toBe('none');
+  });
+
+  it('na lista de espera, sem conta ou sem personagem: sem prédio', async () => {
+    expect(new FakeWorldApi({ state: 'waiting', delayMs: 0 }).meta()).not.toHaveProperty('building');
+    expect(await new FakeWorldApi({ state: 'logged_out', delayMs: 0 }).lastUplink()).toMatchObject({ ok: false, code: 'not_logged_in' });
+    const api = new FakeWorldApi({ state: 'waiting', delayMs: 0 });
+    // A conta de exemplo da espera não tem personagem: aprovada, ainda sem prédio; com o personagem, ele acende.
+    api.approve();
+    expect(api.meta()).not.toHaveProperty('building');
+    expect(await api.pause()).toMatchObject({ ok: false, code: 'no_player' });
+    expect(await api.lastUplink()).toEqual({ ok: true, data: null });
+    expect((await api.saveCharacter(CHARACTER)).ok).toBe(true);
+    expect(api.meta().building).toMatchObject({ connected: true, paused: false, floors: 2, agents: 3 });
+  });
+
+  it('pausar apaga e para o envio; retomar acende e manda o pacote inteiro de novo', async () => {
+    const c = clock(OCT);
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: c.now });
+    let n = 0;
+    api.onChange(() => n++);
+    c.tick(60_000);
+    expect(await api.pause()).toEqual({ ok: true, data: { paused: true } });
+    expect(api.meta().building).toMatchObject({ connected: false, paused: true, floors: 2, agents: 3, lastUplinkAt: OCT });
+    // Pausado, mudar o tema não manda nada.
+    await api.setTheme('christmas');
+    expect(api.meta().building?.lastUplinkAt).toBe(OCT);
+    c.tick(60_000);
+    expect(await api.resume()).toEqual({ ok: true, data: { paused: false } });
+    expect(api.meta().building).toMatchObject({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 120_000, visitors: expect.any(Number) });
+    const last = await api.lastUplink();
+    expect(last.ok && last.data?.uplink.theme).toBe('christmas');
+    expect(n).toBe(3);
+  });
+
+  it('tema: grava a escolha, resolve o automático e recusa valor fora da lista', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
+    expect(api.worldTheme()).toBe('auto');
+    expect((await api.setTheme('none')).ok).toBe(true);
+    expect(api.worldTheme()).toBe('none');
+    const last = await api.lastUplink();
+    expect(last.ok && last.data?.uplink.theme).toBe('none');
+    expect(await api.setTheme('carnaval' as 'none')).toMatchObject({ ok: false, code: 'invalid' });
+  });
+
+  it('remessa recusada: o status e a última remessa trazem o motivo', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
+    api.rejectUplinks('limits');
+    const st = await api.status();
+    expect(st.ok && st.data.building?.lastAck).toEqual({ ok: false, error: 'limits' });
+    const last = await api.lastUplink();
+    expect(last.ok && last.data?.ack).toEqual({ ok: false, error: 'limits', at: OCT });
+    expect(api.meta().building).not.toHaveProperty('lastAck');
+  });
+
+  it('sair do mundo: apagado e fora do mundo até voltar, que manda o pacote inteiro de novo', async () => {
+    const c = clock(OCT);
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: c.now });
+    expect((await api.leave()).ok).toBe(true);
+    expect(api.meta().building).toMatchObject({ connected: false, paused: true, left: true });
+    const st = await api.status();
+    expect(st.ok && st.data.building).toMatchObject({ left: true });
+    c.tick(60_000);
+    expect(await api.join()).toEqual({ ok: true, data: null });
+    expect(api.meta().building).toMatchObject({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 60_000, visitors: expect.any(Number) });
+    // Sem ter saído, voltar não muda nada (nem manda outra remessa).
+    c.tick(60_000);
+    expect((await api.join()).ok).toBe(true);
+    expect(api.meta().building?.lastUplinkAt).toBe(OCT + 60_000);
+  });
+
+  it('parada pelo "mundo": o status traz o motivo, o meta só "parou"; retomar volta', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
+    api.stopBuilding('other-device');
+    const st = await api.status();
+    expect(st.ok && st.data.building?.stopped).toBe('other-device');
+    expect(api.meta().building).toMatchObject({ connected: false, stopped: true });
+    await api.resume();
+    expect(api.meta().building).not.toHaveProperty('stopped');
+  });
+
+  it('o status traz o tema guardado (ausente no automático)', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
+    expect((await api.status()).ok && (await api.status()).ok).toBe(true);
+    const before = await api.status();
+    expect(before.ok && before.data.theme).toBeUndefined();
+    await api.setTheme('halloween');
+    const after = await api.status();
+    expect(after.ok && after.data.theme).toBe('halloween');
+  });
+
+  it('conexão caída: reconectando até retomar; sair da conta tira o prédio do meta', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0 });
+    api.dropConnection();
+    expect(api.meta().building).toMatchObject({ connected: false, paused: false });
+    await api.logout();
+    expect(api.meta()).toEqual({ enabled: true, configured: true, state: 'logged_out' });
+  });
+});
+
+describe('conta e dados (Fase 6)', () => {
+  it('excluir a conta e baixar os dados vão para as rotas do contrato; o JSON vem formatado para salvar', async () => {
+    const { calls, api } = recorder(200, { account: { email: 'a@b.co' }, likesGiven: [] });
+    expect(await api.requestAccountDeletion()).toEqual({ ok: true, data: null });
+    expect(await api.confirmAccountDeletion({ code: '123456' })).toEqual({ ok: true, data: null });
+    const exp = await api.exportData();
+    expect(exp).toEqual({ ok: true, data: '{\n  "account": {\n    "email": "a@b.co"\n  },\n  "likesGiven": []\n}\n' });
+    expect(calls.map((c) => `${c.init?.method} ${c.url} ${c.init?.body ?? ''}`)).toEqual([
+      'POST /api/world/delete-account {}',
+      'POST /api/world/delete-account/confirm {"code":"123456"}',
+      'GET /api/world/export ',
+    ]);
+    expect((await recorder(200, [1]).api.exportData()).ok).toBe(false);
+    expect(await recorder(429, { error: { code: 'rate_limited', retryAfter: 86400 } }).api.exportData()).toMatchObject({ ok: false, code: 'rate_limited', status: 429 });
+    expect(await recorder(503, { error: { code: 'maintenance' } }).api.status()).toMatchObject({ ok: false, code: 'maintenance', status: 503 });
+  });
+
+  it('status: o id da conta (só um id limpo) e o selo "não verificado" do prédio', () => {
+    const base = { available: true, configured: true, state: 'approved' };
+    expect(parseWorldStatus({ ...base, account: { emailMasked: 'a***@b.co', access: 'approved', id: 'acc_1' } })?.account).toEqual({ emailMasked: 'a***@b.co', access: 'approved', id: 'acc_1' });
+    expect(parseWorldStatus({ ...base, account: { emailMasked: 'a***@b.co', access: 'approved', id: '<x>' } })?.account).toEqual({ emailMasked: 'a***@b.co', access: 'approved' });
+    expect(parseBuilding({ connected: true, paused: false, floors: 1, agents: 1, unverified: true })?.unverified).toBe(true);
+    expect(parseBuilding({ connected: true, paused: false, floors: 1, agents: 1, unverified: 'sim' })?.unverified).toBeUndefined();
+    expect(parseWorldStatus({ ...base, player: { name: 'P', look: 'f', parts: {}, traits: [], intro: 'hello', visibility: { notifyInactivity: false } } })?.player?.visibility.notifyInactivity).toBe(false);
+  });
+
+  it('FakeWorldApi: excluir a conta pede o código; o certo tira a conta e deixa o aviso; exportar uma vez por dia', async () => {
+    const api = new FakeWorldApi({ delayMs: 0, state: 'approved' });
+    await api.setTheme('halloween');
+    const data = await api.exportData();
+    expect(data.ok && JSON.parse(data.data)).toMatchObject({ account: { email: FAKE_EMAIL }, player: { name: 'Pixel Dev' } });
+    expect(await api.exportData()).toMatchObject({ ok: false, code: 'rate_limited' });
+    expect(await api.confirmAccountDeletion({ code: FAKE_CODE })).toMatchObject({ ok: false, code: 'invalid_code' });
+    expect((await api.requestAccountDeletion()).ok).toBe(true);
+    expect(await api.confirmAccountDeletion({ code: '000000' })).toMatchObject({ ok: false, code: 'invalid_code' });
+    expect((await api.confirmAccountDeletion({ code: FAKE_CODE })).ok).toBe(true);
+    const st = await api.status();
+    expect(st.ok && st.data).toEqual({ available: true, configured: true, state: 'logged_out', lastError: 'account_deleted' });
+    expect(api.meta()).toEqual({ enabled: true, configured: true, state: 'logged_out' });
+    expect(await api.login({ email: FAKE_EMAIL, password: FAKE_PASSWORD })).toMatchObject({ ok: false, code: 'invalid_credentials' });
+  });
+
+  it('FakeWorldApi: manutenção no status e o prédio sem conexão até acabar', async () => {
+    const api = new FakeWorldApi({ delayMs: 0, state: 'approved' });
+    api.setMaintenance(true);
+    let st = await api.status();
+    expect(st.ok && st.data).toMatchObject({ lastError: 'maintenance', building: { connected: false } });
+    api.setMaintenance(false);
+    st = await api.status();
+    expect(st.ok && st.data.lastError).toBeUndefined();
+    expect(st.ok && st.data.building?.connected).toBe(true);
+  });
+
+  it('FakeWorldApi: o "mundo" marca o prédio como não verificado e o aviso de inatividade fica na visibilidade', async () => {
+    const api = new FakeWorldApi({ delayMs: 0, state: 'approved' });
+    api.markUnverified(true);
+    let st = await api.status();
+    expect(st.ok && st.data.building?.unverified).toBe(true);
+    api.markUnverified(false);
+    st = await api.status();
+    expect(st.ok && st.data.building?.unverified).toBeUndefined();
+    const vis = st.ok ? st.data.player!.visibility : undefined;
+    expect((await api.saveVisibility({ ...vis!, notifyInactivity: false })).ok).toBe(true);
+    st = await api.status();
+    expect(st.ok && st.data.player?.visibility.notifyInactivity).toBe(false);
   });
 });
