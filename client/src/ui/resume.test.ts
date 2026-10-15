@@ -117,3 +117,16 @@ describe('resumeCommand (Codex)', () => {
     expect(resumeCommand(codex({ open: true }), undefined)).toBeUndefined();
   });
 });
+
+describe('resumeCommand (Antigravity)', () => {
+  const agy = (p: Partial<ResumeSession> = {}) => session({ account: 'antigravity', provider: 'antigravity', ...p });
+
+  it('conta padrão antigravity: cd e agy resume, sem GEMINI_CONFIG_DIR', () => {
+    expect(resumeCommand(agy(), undefined)).toBe(`cd '/home/ana/proj' && agy resume ${ID}`);
+  });
+
+  it('sessão aberta do Antigravity não gera comando', () => {
+    expect(resumeCommand(agy({ open: true }), undefined)).toBeUndefined();
+  });
+});
+

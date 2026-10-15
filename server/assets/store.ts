@@ -39,6 +39,7 @@ export interface AssetStoreOptions {
   /** Porta do Habblaud (o CLAUDE.md ensina o agente a exportar/importar pela API). */
   port: number;
   onChange: () => void;
+  seedPresets?: boolean;
 }
 
 export class AssetStore {
@@ -113,6 +114,32 @@ export class AssetStore {
     }
     // Só reescreve o guia que o próprio Habblaud gerou (com o marcador); um CLAUDE.md do usuário fica intocado.
     if (current === null || (current.includes(GUIDE_MARKER) && current !== text)) writeFileSync(guide, text);
+    const agentsGuide = join(this.dir, 'AGENTS.md');
+    if (!existsSync(agentsGuide)) writeFileSync(agentsGuide, text);
+
+    const pubsecRoom = join(this.dir, 'rooms', 'pubsec_hq.json');
+    if (this.opts.seedPresets && !existsSync(pubsecRoom)) {
+      const roomDef = {
+        name: 'PubSec HQ - Centro de Comando',
+        floor: 'concrete',
+        wall: { style: 'slate', pattern: 'brick' },
+        desks: [
+          { x: 2, y: 4, facing: 'right' },
+          { x: 2, y: 7, facing: 'right' },
+          { x: 12, y: 4, facing: 'left' },
+          { x: 12, y: 7, facing: 'left' },
+        ],
+        furniture: [
+          { kind: 'tv', x: 2, y: 1 },
+          { kind: 'whiteboard', x: 10, y: 1 },
+          { kind: 'vending_machine', x: 13, y: 2 },
+          { kind: 'water_cooler', x: 1, y: 2 },
+          { kind: 'plant_tall', x: 1, y: 9, variant: 'monstera' },
+          { kind: 'plant_tall', x: 13, y: 9, variant: 'monstera' },
+        ],
+      };
+      writeFileSync(pubsecRoom, JSON.stringify(roomDef, null, 2));
+    }
   }
 
   /** Relê a pasta; se algo mudou, valida, publica a versão nova e reescreve o STATUS.md. */

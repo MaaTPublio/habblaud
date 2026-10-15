@@ -363,4 +363,20 @@ describe('carregar o node-pty e achar o claude', () => {
       expect(claudeBinFrom({ ...env, HABBLAUD_CLAUDE_BIN: 'outro' })).toBeUndefined();
     }),
   );
+
+  it('create com provider antigravity: usa conta antigravity e executa agy', () => {
+    const binDir = join(tmpdir(), 'habblaud-agy-bin-test');
+    mkdirSync(binDir, { recursive: true });
+    const agyBin = join(binDir, process.platform === 'win32' ? 'agy.cmd' : 'agy');
+    writeFileSync(agyBin, '#!/bin/sh\n');
+    if (process.platform !== 'win32') chmodSync(agyBin, 0o755);
+
+    const env = { ...process.env, PATH: `${binDir}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}` };
+    const s = setup({ env });
+    const info = s.manager.create({ cwd: tmpdir(), provider: 'antigravity' });
+    expect(info).toMatchObject({ cwd: tmpdir(), account: 'antigravity' });
+    expect(s.spawned).toHaveLength(1);
+    expect(s.spawned[0].cwd).toBe(tmpdir());
+  });
 });
+

@@ -27,6 +27,7 @@ export function shellQuote(value: string): string {
 const TOOLS = {
   claude: { bin: 'claude --resume', envVar: 'CLAUDE_CONFIG_DIR', defaultId: '.claude' },
   codex: { bin: 'codex resume', envVar: 'CODEX_HOME', defaultId: '.codex' },
+  antigravity: { bin: 'agy resume', envVar: 'GEMINI_CONFIG_DIR', defaultId: 'antigravity' },
 };
 
 /** `cd '<pasta>' && [VAR='<conta>' ]ferramenta <id>`, ou `undefined` quando não dá para montar com segurança. */
@@ -40,7 +41,7 @@ export function resumeCommand(
   const project = session.project;
   if (!project || CONTROL_CHARS.test(project)) return undefined;
   if (!SESSION_ID.test(session.sessionId)) return undefined;
-  const tool = session.provider === 'codex' ? TOOLS.codex : TOOLS.claude;
+  const tool = session.provider === 'antigravity' ? TOOLS.antigravity : session.provider === 'codex' ? TOOLS.codex : TOOLS.claude;
   let env = '';
   if (session.account !== tool.defaultId) {
     const dir = account?.id === session.account ? account.configDir : undefined;

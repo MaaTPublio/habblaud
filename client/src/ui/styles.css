@@ -9739,6 +9739,7 @@ html.is-replay #world {
     flex: 1 1 auto;
     justify-content: center;
   }
+}
 
 /* "Abrir projeto" (ui/projectpicker.ts): botão no topo da lista lateral e a janela de escolher pasta. */
 .ui-side__title-actions {

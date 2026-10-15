@@ -139,8 +139,8 @@ if (codex) agents.add(codex);
 // OpenCode (sources/opencode/): lê o opencode.db só para leitura. Só entra com HABBLAUD_OPENCODE ligado e o banco existindo.
 const opencode = createOpencodeSource(config, { accounts, office });
 if (opencode) agents.add(opencode);
-// Antigravity (sources/antigravity/): só por eventos do hook dele (nenhum arquivo é lido). Entra com HABBLAUD_ANTIGRAVITY ligado.
-const antigravity = config.antigravity ? new AntigravitySource({ accounts, office, usageFile: join(config.usageDir, 'antigravity-quota.json') }) : undefined;
+// Antigravity (sources/antigravity/): suporte híbrido com eventos ao vivo e leitura passiva do banco SQLite/transcripts.
+const antigravity = config.antigravity ? new AntigravitySource({ accounts, office, home: config.home, enableDb: true, usageFile: join(config.usageDir, 'antigravity-quota.json') }) : undefined;
 if (antigravity) agents.add(antigravity);
 // Eventos dos hooks do Codex (POST /api/codex/events, mod/habblaud-codex/hook.mjs): vão para a fonte do Codex ao vivo
 // (CodexLive); sem ela (nenhuma pasta do Codex ou HABBLAUD_CODEX=0) a rota responde {ok: false}.
@@ -285,7 +285,7 @@ const ptys = spawnPty
 late.ptys = ptys;
 late.ptyOff = ptyOff;
 // Assets do usuário (salas, itens e arquitetura criados pelo Arquiteto): observa a pasta e recarrega ao vivo.
-const assets = new AssetStore({ dir: config.assetsDir, port: config.port, onChange: () => office.markDirty() });
+const assets = new AssetStore({ dir: config.assetsDir, port: config.port, onChange: () => office.markDirty(), seedPresets: true });
 
 if (config.demo) office.setDemo(true);
 // As fontes síncronas (a do Claude Code) terminam o boot aqui, antes de o hub começar a transmitir.

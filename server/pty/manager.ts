@@ -20,7 +20,7 @@ import { pidAlive } from '../sources/registry';
 import { readProcInfo, sameProcess, type ProcInfo, type RegisteredProc } from './procinfo';
 import { killWithConsoleReset } from './winkill';
 import { tr } from '../../shared/i18n';
-import { isExecutableFile } from '../claude-bin';
+import { findExecutable, isExecutableFile } from '../claude-bin';
 
 export { claudeBinFrom, findExecutable, isExecutableFile } from '../claude-bin';
 
@@ -169,6 +169,7 @@ interface SpawnPlan {
   account: PtyAccount;
   cols: number;
   rows: number;
+  provider?: string;
 }
 
 export class PtyError extends Error {
@@ -221,8 +222,8 @@ export class PtyManager {
     return [...this.ptys.values()].map((t) => ({ ...t.info }));
   }
 
-  /** Abre uma sessão nova do Claude Code na pasta (`cwd` absoluto), na conta pedida (ou na padrão). */
-  create(p: { cwd: unknown; account?: unknown; cols?: unknown; rows?: unknown }): PtyInfo {
+  /** Abre uma sessão nova (Claude Code ou Antigravity) na pasta (`cwd` absoluto). */
+  create(p: { cwd: unknown; account?: unknown; provider?: unknown; cols?: unknown; rows?: unknown }): PtyInfo {
     return this.spawn(this.plan(p, this.takeovers.size));
   }
 
@@ -370,11 +371,15 @@ export class PtyManager {
   }
 
   /** Valida o pedido de uma sessão nova (`reserved`: vagas já prometidas a tomadas em andamento). */
-  private plan(p: { cwd: unknown; account?: unknown; cols?: unknown; rows?: unknown }, reserved = 0): SpawnPlan {
+  private plan(p: { cwd: unknown; account?: unknown; provider?: unknown; cols?: unknown; rows?: unknown }, reserved = 0): SpawnPlan {
     if (!this.opts.spawn) throw new PtyError(503, tr('terminal desligado: {0}', [this.opts.disabledReason ?? tr('indisponível')]));
-    // Antes de tudo (o "assumir" encerra a sessão de lá depois daqui): um claude que não roda abriria um terminal que
-    // sai na hora.
-    if (!isExecutableFile(this.opts.claudeBin)) throw new PtyError(503, tr('o executável do Claude Code não roda: {0} (confira o HABBLAUD_CLAUDE_BIN)', [this.opts.claudeBin]));
+    const provider = p.provider === 'antigravity' ? 'antigravity' : 'claude';
+    if (provider === 'antigravity') {
+      const agyBin = findExecutable('agy', this.opts.env ?? process.env, process.platform);
+      if (!agyBin) throw new PtyError(503, tr('o executável agy do Antigravity não foi encontrado no PATH'));
+    } else {
+      if (!isExecutableFile(this.opts.claudeBin)) throw new PtyError(503, tr('o executável do Claude Code não roda: {0} (confira o HABBLAUD_CLAUDE_BIN)', [this.opts.claudeBin]));
+    }
     if (typeof p.cwd !== 'string' || !isAbsolute(p.cwd)) throw new PtyError(400, tr('informe a pasta do projeto (caminho absoluto)'));
     const cwd = resolve(p.cwd);
     let isDir = false;
@@ -385,17 +390,22 @@ export class PtyManager {
     }
     if (!isDir) throw new PtyError(400, tr('pasta não encontrada: {0}', [cwd]));
     const accounts = this.opts.accounts();
-    const account = typeof p.account === 'string' ? accounts.find((a) => a.id === p.account) : (accounts.find((a) => a.isDefault) ?? accounts[0]);
-    if (!account) throw new PtyError(400, tr('conta desconhecida'));
+    let account = typeof p.account === 'string' ? accounts.find((a) => a.id === p.account) : undefined;
+    if (!account && provider === 'antigravity') {
+      account = { id: 'antigravity', dir: 'antigravity', isDefault: false };
+    }
+    if (!account) {
+      account = accounts.find((a) => a.isDefault) ?? accounts[0] ?? { id: '.claude', dir: '.claude', isDefault: true };
+    }
     const running = [...this.ptys.values()].filter((t) => t.info.exitedAt === undefined).length;
     if (running + Math.max(0, reserved) >= MAX_PTYS) throw new PtyError(429, tr('limite de {0} terminais abertos', [MAX_PTYS]));
-    return { cwd, account, cols: clampInt(p.cols, 20, 400, 100), rows: clampInt(p.rows, 5, 200, 30) };
+    return { cwd, account, provider, cols: clampInt(p.cols, 20, 400, 100), rows: clampInt(p.rows, 5, 200, 30) };
   }
 
   private spawn(plan: SpawnPlan, p: { resume?: string; from?: string } = {}): PtyInfo {
     const spawn = this.opts.spawn;
     if (!spawn) throw new PtyError(503, tr('terminal desligado: {0}', [this.opts.disabledReason ?? tr('indisponível')]));
-    const { cwd, account, cols, rows } = plan;
+    const { cwd, account, cols, rows, provider } = plan;
     const env: NodeJS.ProcessEnv = { ...(this.opts.env ?? process.env), TERM: 'xterm-256color', COLORTERM: 'truecolor' };
     for (const k of INHERITED_SESSION_VARS) delete env[k];
     if (account.isDefault) delete env.CLAUDE_CONFIG_DIR;
@@ -403,10 +413,17 @@ export class PtyManager {
 
     let proc: PtyProcess;
     try {
-      const args = p.resume ? ['--resume', p.resume] : [];
-      proc = spawn(this.opts.claudeBin, args, { cwd, cols, rows, env });
+      if (provider === 'antigravity') {
+        const bin = findExecutable('agy', env, process.platform) ?? 'agy';
+        const args = p.resume ? ['resume', p.resume] : [];
+        proc = spawn(bin, args, { cwd, cols, rows, env });
+      } else {
+        const args = p.resume ? ['--resume', p.resume] : [];
+        proc = spawn(this.opts.claudeBin, args, { cwd, cols, rows, env });
+      }
     } catch (err) {
-      throw new PtyError(500, tr('não consegui abrir o Claude Code: {0}', [errMsg(err)]));
+      const toolName = provider === 'antigravity' ? 'Antigravity' : 'Claude Code';
+      throw new PtyError(500, tr('não consegui abrir o {0}: {1}', [toolName, errMsg(err)]));
     }
     const id = `p${++this.seq}-${proc.pid}`;
     const info: PtyInfo = { id, pid: proc.pid, cwd, account: account.id, agentId: `${account.id}:${proc.pid}`, startedAt: this.now() };

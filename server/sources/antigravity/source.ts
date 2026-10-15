@@ -13,8 +13,11 @@ import { toEpochMs, usageFromAntigravity } from '../../accounts/usage';
 import { errMsg, log } from '../../log';
 import type { Office } from '../../model/office';
 import type { AgentSource } from '../source';
+import type { TerminalParser } from '../terminal';
 import { describeAntigravityTool } from './activity';
+import { AntigravityDbWatcher, type DiscoveredSession } from './db';
 import { AG_EVENTS, CONVERSATION_ID_RE, type AntigravityEvent, type AntigravityLive } from './live';
+import { createAntigravityTerminalParser } from './terminal';
 
 /** Conversa sem nenhum evento há mais que isto sai do escritório. */
 export const PRESENCE_MS = 30 * 60_000;
@@ -30,6 +33,7 @@ const PATHS_MAX = 8;
 export interface AntigravitySourceOptions {
   accounts: AccountsService;
   office: Office;
+  home?: string;
   now?: () => number;
   /** De quanto em quanto tempo varrer as conversas paradas (padrão 60 s). */
   sweepMs?: number;
@@ -37,6 +41,10 @@ export interface AntigravitySourceOptions {
   usageFile?: string;
   /** De quanto em quanto tempo conferir o arquivo das cotas (padrão 5 s). */
   usagePollMs?: number;
+  /** De quanto em quanto tempo conferir o SQLite passivo do agy (padrão 2 s). */
+  dbPollMs?: number;
+  /** Liga a observação passiva do banco SQLite e transcripts do agy (ativado no servidor). */
+  enableDb?: boolean;
 }
 
 /** O arquivo das cotas tem ~300 bytes; maior que isto não é dele. */
@@ -67,9 +75,16 @@ export class AntigravitySource implements AgentSource, AntigravityLive {
   private usageMtime = 0;
   private stopped = false;
   private readonly now: () => number;
+  private readonly dbWatcher: AntigravityDbWatcher;
 
   constructor(private readonly opts: AntigravitySourceOptions) {
     this.now = opts.now ?? Date.now;
+    this.dbWatcher = new AntigravityDbWatcher({
+      home: opts.home,
+      pollMs: opts.dbPollMs,
+      now: this.now,
+      onSession: (s) => this.onDbSession(s),
+    });
   }
 
   start(): void {
@@ -80,12 +95,16 @@ export class AntigravitySource implements AgentSource, AntigravityLive {
       this.usageTimer = setInterval(() => this.readUsage(), this.opts.usagePollMs ?? USAGE_POLL_MS);
       this.usageTimer.unref?.();
     }
+    if (this.opts.enableDb) {
+      this.dbWatcher.start();
+    }
   }
 
   stop(): void {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     if (this.usageTimer) clearInterval(this.usageTimer);
+    this.dbWatcher.stop();
     this.timer = null;
     this.usageTimer = null;
   }
@@ -94,12 +113,50 @@ export class AntigravitySource implements AgentSource, AntigravityLive {
     if (!this.registered) return [];
     let sessions = 0;
     for (const t of this.trackers.values()) if (t.inOffice) sessions++;
-    return [{ label: this.accountId, provider: 'antigravity', path: '', sessions, ok: true }];
+    return [{ label: this.accountId, provider: 'antigravity', path: this.dbWatcher.antigravityDir ?? '', sessions, ok: true }];
   }
 
-  /** O agy não deixa uma conversa em arquivo de texto que a fonte leia: sem terminal nem histórico. */
-  transcriptPathOf(_agentId: string): string | undefined {
+  /** Caminho do transcript.jsonl da conversa (se existir na pasta brain do agy). */
+  transcriptPathOf(agentId: string): string | undefined {
+    const convId = agentId.startsWith('antigravity:')
+      ? agentId.slice('antigravity:'.length)
+      : agentId.startsWith('antigravity-')
+        ? agentId.slice('antigravity-'.length)
+        : undefined;
+    if (!convId) return undefined;
+    return this.dbWatcher.transcriptPathOf(convId);
+  }
+
+  /** Parser de terminal para sessões do Antigravity. */
+  terminalParser(agentId: string): TerminalParser | undefined {
+    if (this.transcriptPathOf(agentId)) {
+      return createAntigravityTerminalParser();
+    }
     return undefined;
+  }
+
+  /** Chamado quando o banco SQLite detecta uma sessão ativa ou recente. */
+  private onDbSession(s: DiscoveredSession): void {
+    if (this.stopped) return;
+    const key = `antigravity:${s.convId}`;
+    const now = this.now();
+    let t = this.trackers.get(key);
+    const stats = { toolCalls: 0, tokensIn: 0, tokensOut: 0, subagents: 0 };
+    if (!t) {
+      t = { key, conversationId: s.convId, inOffice: false, status: s.status, lastEventAt: s.lastModifiedAt };
+      this.trackers.set(key, t);
+      this.enter(t, s.cwd, s.status, s.lastModifiedAt);
+      if (s.title && t.inOffice) {
+        this.opts.office.applyTranscript(key, { title: s.title, tasks: [], stats });
+      }
+    } else if (t.inOffice) {
+      if (now - t.lastEventAt > 15_000) {
+        this.setStatus(t, s.status);
+      }
+      if (s.title) {
+        this.opts.office.applyTranscript(key, { title: s.title, tasks: [], stats });
+      }
+    }
   }
 
   /** A conta só é registrada no primeiro evento: sem `agy` em uso, não aparece conta nenhuma. */

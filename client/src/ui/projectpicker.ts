@@ -23,6 +23,7 @@ export class ProjectPicker {
   private msg: HTMLElement;
   private upBtn: HTMLButtonElement;
   private openBtn: HTMLButtonElement;
+  private openAgyBtn: HTMLButtonElement;
   private current: DirListing | null = null;
   private req = 0;
   private opener: HTMLElement | null = null;
@@ -43,7 +44,8 @@ export class ProjectPicker {
     this.shortcuts = h('div', { class: 'ui-pick__shortcuts' });
     this.list = h('ul', { class: 'ui-pick__list', attrs: { 'aria-label': tr('Pastas') } });
     this.msg = h('p', { class: 'ui-pick__msg', role: 'status', hidden: true });
-    this.openBtn = h('button', { class: 'ui-btn ui-btn--accent', type: 'button', text: tr('Abrir Claude Code aqui'), on: { click: () => this.open() } });
+    this.openBtn = h('button', { class: 'ui-btn ui-btn--accent', type: 'button', text: tr('Abrir Claude Code'), on: { click: () => this.open('claude') } });
+    this.openAgyBtn = h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: tr('Abrir Antigravity (agy)'), on: { click: () => this.open('antigravity') } });
     const close = iconButton(ICONS.close, tr('Fechar (Esc)'), () => this.close(), 'ui-icon-btn--sm');
     this.el = h(
       'div',
@@ -52,12 +54,12 @@ export class ProjectPicker {
         'div',
         { class: 'ui-pick__box' },
         h('div', { class: 'ui-pick__head' }, h('h2', { text: tr('Abrir projeto') }), close),
-        h('p', { class: 'ui-muted ui-small', text: tr('Escolha a pasta do projeto: o Claude Code abre nela, num terminal interativo.') }),
+        h('p', { class: 'ui-muted ui-small', text: tr('Escolha a pasta do projeto: o agente abre nela, num terminal interativo.') }),
         h('div', { class: 'ui-pick__nav' }, this.upBtn, this.input),
         this.shortcuts,
         this.list,
         this.msg,
-        h('div', { class: 'ui-pick__foot' }, h('button', { class: 'ui-btn', type: 'button', text: tr('Cancelar'), on: { click: () => this.close() } }), this.openBtn),
+        h('div', { class: 'ui-pick__foot' }, h('button', { class: 'ui-btn', type: 'button', text: tr('Cancelar'), on: { click: () => this.close() } }), this.openBtn, this.openAgyBtn),
       ),
     );
     // Clique fora da caixa fecha; as teclas daqui não viram atalhos do escritório.
@@ -133,16 +135,20 @@ export class ProjectPicker {
     );
   }
 
-  private open(): void {
+  private open(provider: 'claude' | 'antigravity' = 'claude'): void {
     const path = this.current?.path;
     const router = this.ctx.terminals;
     if (!path || !router) return;
     this.openBtn.disabled = true;
+    this.openAgyBtn.disabled = true;
     router
-      .newSession(path)
+      .newSession(path, provider === 'antigravity' ? 'antigravity' : undefined, provider)
       .then(() => this.close())
       .catch((err: Error) => this.showMsg(tr('Não deu: {0}', [err.message]), true))
-      .finally(() => (this.openBtn.disabled = false));
+      .finally(() => {
+        this.openBtn.disabled = false;
+        this.openAgyBtn.disabled = false;
+      });
   }
 
   private showMsg(text: string, error = false): void {
